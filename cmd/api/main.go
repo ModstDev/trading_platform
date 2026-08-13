@@ -4,9 +4,20 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/ModstDev/trading_platform/internal/config"
+	"github.com/ModstDev/trading_platform/internal/database"
 )
 
 func main() {
+	cfg := config.Load()
+
+	db, err := database.Connect(cfg.Database)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", healthHandler)

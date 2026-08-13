@@ -1,0 +1,17 @@
+services:
+  mariadb:
+    image: mariadb:12.3
+    container_name: trading-platform-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: trading
+      MARIADB_USER: trading
+      MARIADB_PASSWORD: tradingpassword
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+volumes:
+  mariadb_data:
