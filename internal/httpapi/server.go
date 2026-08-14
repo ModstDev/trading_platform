@@ -1,16 +1,22 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/ModstDev/trading_platform/internal/database"
 	"github.com/ModstDev/trading_platform/internal/user"
 )
 
-type Server struct {
-	userService *user.Service
+type UserService interface {
+	Register(ctx context.Context, input user.RegisterInput) (*database.User, error)
 }
 
-func NewServer(userService *user.Service) *Server {
+type Server struct {
+	userService UserService
+}
+
+func NewServer(userService UserService) *Server {
 	return &Server{
 		userService: userService,
 	}
