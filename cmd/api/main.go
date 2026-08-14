@@ -1,15 +1,21 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
 	"github.com/ModstDev/trading_platform/internal/config"
 	"github.com/ModstDev/trading_platform/internal/database"
+	"github.com/ModstDev/trading_platform/internal/httpapi"
+	"github.com/ModstDev/trading_platform/internal/user"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("warning: .env file not found")
+	}
+
 	cfg := config.Load()
 
 	db, err := database.Connect(cfg.Database)
@@ -18,31 +24,16 @@ func main() {
 	}
 	defer db.Close()
 
-	mux := http.NewServeMux()
+	queries := database.New(db)
+	userService := user.NewService(queries)
 
-	mux.HandleFunc("GET /health", healthHandler)
+	_ = userService
 
-	server := http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
+	server := httpapi.NewServer(userService)
 
 	log.Println("API listening on :8080")
 
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	response := map[string]string{
-		"status": "ok",
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
+	if err := http.ListenAndServe(":8080", server.Handler()); err != nil {
+		log.Fatalf("HTTP server: %v", err)
 	}
 }

@@ -11,7 +11,7 @@ import (
 // Connect opens a database connection using the provided configuration.
 func Connect(cfg config.DatabaseConfig) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s",
+		"%s:%s@tcp(%s:%s)/%s?parseTime=true",
 		cfg.User,
 		cfg.Password,
 		cfg.Host,
@@ -25,7 +25,7 @@ func Connect(cfg config.DatabaseConfig) (*sql.DB, error) {
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("pining database: %w", err)
+		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
 	return db, nil
