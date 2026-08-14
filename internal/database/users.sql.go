@@ -7,10 +7,9 @@ package database
 
 import (
 	"context"
-	"database/sql"
 )
 
-const createUser = `-- name: CreateUser :execresult
+const createUser = `-- name: CreateUser :exec
 INSERT INTO users (
     email,
     password_hash
@@ -23,8 +22,9 @@ type CreateUserParams struct {
 	PasswordHash string
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, createUser, arg.Email, arg.PasswordHash)
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
+	_, err := q.db.ExecContext(ctx, createUser, arg.Email, arg.PasswordHash)
+	return err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
