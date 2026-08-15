@@ -141,3 +141,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Orde
 
 	return &order, nil
 }
+
+func (s *Service) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]database.Order, error) {
+	orders, err := s.queries.ListOrdersByAccountID(ctx, accountID.String())
+	if err != nil {
+		return nil, fmt.Errorf("listing orders: %w", err)
+	}
+
+	return orders, nil
+}

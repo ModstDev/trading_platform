@@ -59,3 +59,33 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(createdOrder)
 }
+
+func (s *Server) listOrders(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "user ID not found", http.StatusUnauthorized)
+		return
+	}
+
+	account, err := s.accountService.GetByUserID(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+
+	accountID, err := uuid.Parse(account.ID)
+	if err != nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+	orders, err := s.orderService.ListByAccountID(r.Context(), accountID)
+	if err != nil {
+		http.Error(w, "failed to get orders", http.StatusInternalServerError)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(orders); err != nil {
+		return
+	}
+}
