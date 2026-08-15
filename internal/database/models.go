@@ -18,6 +18,15 @@ type Account struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type Instrument struct {
+	ID        string    `json:"id"`
+	Symbol    string    `json:"symbol"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	Currency  string    `json:"currency"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"password_hash"`

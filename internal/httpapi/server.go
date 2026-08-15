@@ -19,17 +19,25 @@ type AccountService interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*database.Account, error)
 }
 
-type Server struct {
-	userService    UserService
-	accountService AccountService
-	jwtSecret      string
+type InstrumentService interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*database.Instrument, error)
+	GetBySymbol(ctx context.Context, symbol string) (*database.Instrument, error)
+	List(ctx context.Context) ([]database.Instrument, error)
 }
 
-func NewServer(userService UserService, accountService AccountService, jwtSecret string) *Server {
+type Server struct {
+	userService       UserService
+	accountService    AccountService
+	instrumentService InstrumentService
+	jwtSecret         string
+}
+
+func NewServer(userService UserService, accountService AccountService, instrumentService InstrumentService, jwtSecret string) *Server {
 	return &Server{
-		userService:    userService,
-		accountService: accountService,
-		jwtSecret:      jwtSecret,
+		userService:       userService,
+		accountService:    accountService,
+		instrumentService: instrumentService,
+		jwtSecret:         jwtSecret,
 	}
 }
 
@@ -40,5 +48,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login", s.loginUser)
 	mux.Handle("GET /me", s.requireAuth(http.HandlerFunc(s.getMe)))
 	mux.Handle("GET /account", s.requireAuth(http.HandlerFunc(s.getAccount)))
+	mux.HandleFunc("GET /instruments", s.listInstruments)
 	return mux
 }
