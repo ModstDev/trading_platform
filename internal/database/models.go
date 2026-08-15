@@ -5,6 +5,7 @@
 package database
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,18 @@ type Instrument struct {
 	Type      string    `json:"type"`
 	Currency  string    `json:"currency"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Order struct {
+	ID           string         `json:"id"`
+	AccountID    string         `json:"account_id"`
+	InstrumentID string         `json:"instrument_id"`
+	Side         string         `json:"side"`
+	Type         string         `json:"type"`
+	Quantity     string         `json:"quantity"`
+	Price        sql.NullString `json:"price"`
+	Status       string         `json:"status"`
+	CreatedAt    time.Time      `json:"created_at"`
 }
 
 type User struct {
