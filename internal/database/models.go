@@ -10,6 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type Account struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Balance   string    `json:"balance"`
+	Currency  string    `json:"currency"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"password_hash"`

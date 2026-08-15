@@ -119,13 +119,13 @@ func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user not found", http.StatusNotFound)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
 	response := UserResponse{
 		ID:        user.ID,
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
 	}
+
+	w.Header().Set("Content-Type", "application/json")
 
 	json.NewEncoder(w).Encode(response)
 }
