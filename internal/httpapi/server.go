@@ -15,15 +15,21 @@ type UserService interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*database.User, error)
 }
 
-type Server struct {
-	userService UserService
-	jwtSecret   string
+type AccountService interface {
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*database.Account, error)
 }
 
-func NewServer(userService UserService, jwtSecret string) *Server {
+type Server struct {
+	userService    UserService
+	accountService AccountService
+	jwtSecret      string
+}
+
+func NewServer(userService UserService, accountService AccountService, jwtSecret string) *Server {
 	return &Server{
-		userService: userService,
-		jwtSecret:   jwtSecret,
+		userService:    userService,
+		accountService: accountService,
+		jwtSecret:      jwtSecret,
 	}
 }
 
@@ -33,5 +39,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /users", s.registerUser)
 	mux.HandleFunc("POST /login", s.loginUser)
 	mux.Handle("GET /me", s.requireAuth(http.HandlerFunc(s.getMe)))
+	mux.Handle("GET /account", s.requireAuth(http.HandlerFunc(s.getAccount)))
 	return mux
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/ModstDev/trading_platform/internal/account"
 	"github.com/ModstDev/trading_platform/internal/config"
 	"github.com/ModstDev/trading_platform/internal/database"
 	"github.com/ModstDev/trading_platform/internal/httpapi"
@@ -26,8 +27,9 @@ func main() {
 
 	queries := database.New(db)
 	userService := user.NewService(db, queries)
+	accountService := account.NewService(queries)
 
-	server := httpapi.NewServer(userService, cfg.JWT.Secret)
+	server := httpapi.NewServer(userService, accountService, cfg.JWT.Secret)
 
 	log.Println("API listening on :8080")
 
