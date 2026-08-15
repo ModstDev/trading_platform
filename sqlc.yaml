@@ -9,3 +9,10 @@ sql:
         package: "database"
         out: "internal/database"
         sql_package: "database/sql"
+        emit_json_tags: true
+
+        overrides:
+          - column: "users.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"

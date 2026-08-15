@@ -1,0 +1,9 @@
+-- +goose Up
+
+ALTER TABLE users
+    MODIFY COLUMN id CHAR(36) NOT NULL;
+
+-- +goose Down
+
+ALTER TABLE users
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT;

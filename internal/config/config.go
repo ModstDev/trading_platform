@@ -4,6 +4,11 @@ import "os"
 
 type Config struct {
 	Database DatabaseConfig
+	JWT      JWTConfig
+}
+
+type JWTConfig struct {
+	Secret string
 }
 
 type DatabaseConfig struct {
@@ -22,6 +27,9 @@ func Load() Config {
 			User:     getEnv("DB_USER", "trading"),
 			Password: getEnv("DB_PASSWORD", ""),
 			Name:     getEnv("DB_NAME", "trading"),
+		},
+		JWT: JWTConfig{
+			Secret: getEnv("JWT_SECRET", ""),
 		},
 	}
 }

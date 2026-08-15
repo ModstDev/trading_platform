@@ -27,9 +27,7 @@ func main() {
 	queries := database.New(db)
 	userService := user.NewService(queries)
 
-	_ = userService
-
-	server := httpapi.NewServer(userService)
+	server := httpapi.NewServer(userService, cfg.JWT.Secret)
 
 	log.Println("API listening on :8080")
 

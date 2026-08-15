@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/ModstDev/trading_platform/internal/auth"
 	"github.com/ModstDev/trading_platform/internal/database"
 )
@@ -17,6 +19,11 @@ type Service struct {
 }
 
 type RegisterInput struct {
+	Email    string
+	Password string
+}
+
+type LoginInput struct {
 	Email    string
 	Password string
 }
@@ -41,7 +48,10 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*database.
 		return nil, fmt.Errorf("hashing password %w", err)
 	}
 
+	userID := uuid.New()
+
 	err = s.queries.CreateUser(ctx, database.CreateUserParams{
+		ID:           userID,
 		Email:        input.Email,
 		PasswordHash: passwordHash,
 	})
@@ -58,6 +68,44 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*database.
 		ID:        user.ID,
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
+	}, nil
+}
+
+func (s *Service) Login(
+	ctx context.Context,
+	input LoginInput,
+) (*database.User, error) {
+	user, err := s.queries.GetUserByEmail(ctx, input.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	valid, err := auth.CheckPassword(input.Password, user.PasswordHash)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, errors.New("invalid credentials")
+	}
+
+	return &database.User{
+		ID:        user.ID,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+	}, nil
+}
+
+func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*database.User, error) {
+	user, err := s.queries.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("getting user by ID: %w", err)
+	}
+
+	return &database.User{
+		ID:           user.ID,
+		Email:        user.Email,
+		PasswordHash: user.PasswordHash,
+		CreatedAt:    user.CreatedAt,
 	}, nil
 }
 
