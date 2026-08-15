@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"database/sql"
+
 	"github.com/google/uuid"
 
 	"github.com/ModstDev/trading_platform/internal/auth"
@@ -15,6 +17,7 @@ import (
 const minPasswordLength = 8
 
 type Service struct {
+	db      *sql.DB
 	queries *database.Queries
 }
 
@@ -28,8 +31,9 @@ type LoginInput struct {
 	Password string
 }
 
-func NewService(queries *database.Queries) *Service {
+func NewService(db *sql.DB, queries *database.Queries) *Service {
 	return &Service{
+		db:      db,
 		queries: queries,
 	}
 }
@@ -48,15 +52,37 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*database.
 		return nil, fmt.Errorf("hashing password %w", err)
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	queries := database.New(tx)
+
 	userID := uuid.New()
 
-	err = s.queries.CreateUser(ctx, database.CreateUserParams{
+	err = queries.CreateUser(ctx, database.CreateUserParams{
 		ID:           userID,
 		Email:        input.Email,
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating user: %w", err)
+	}
+
+	err = queries.CreateAccount(ctx, database.CreateAccountParams{
+		ID:       uuid.New().String(),
+		UserID:   userID.String(),
+		Balance:  "0.0000",
+		Currency: "EUR",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating account: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("committing transaction: %w", err)
 	}
 
 	user, err := s.queries.GetUserByEmail(ctx, input.Email)

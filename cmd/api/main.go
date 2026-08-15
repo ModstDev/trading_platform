@@ -25,7 +25,7 @@ func main() {
 	defer db.Close()
 
 	queries := database.New(db)
-	userService := user.NewService(queries)
+	userService := user.NewService(db, queries)
 
 	server := httpapi.NewServer(userService, cfg.JWT.Secret)
 
