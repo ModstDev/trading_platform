@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"time"
 )
 
 const createAccount = `-- name: CreateAccount :exec
@@ -14,16 +16,18 @@ INSERT INTO accounts (
     id,
     user_id,
     balance,
+    reserved_balance,
     currency
 )
-VALUES (?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type CreateAccountParams struct {
-	ID       string `json:"id"`
-	UserID   string `json:"user_id"`
-	Balance  string `json:"balance"`
-	Currency string `json:"currency"`
+	ID              string `json:"id"`
+	UserID          string `json:"user_id"`
+	Balance         string `json:"balance"`
+	ReservedBalance string `json:"reserved_balance"`
+	Currency        string `json:"currency"`
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) error {
@@ -31,9 +35,45 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 		arg.ID,
 		arg.UserID,
 		arg.Balance,
+		arg.ReservedBalance,
 		arg.Currency,
 	)
 	return err
+}
+
+const getAccountByID = `-- name: GetAccountByID :one
+SELECT
+    id,
+    user_id,
+    balance,
+    reserved_balance,
+    currency,
+    created_at
+FROM accounts
+WHERE id = ?
+`
+
+type GetAccountByIDRow struct {
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	Balance         string    `json:"balance"`
+	ReservedBalance string    `json:"reserved_balance"`
+	Currency        string    `json:"currency"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+func (q *Queries) GetAccountByID(ctx context.Context, id string) (GetAccountByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getAccountByID, id)
+	var i GetAccountByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Balance,
+		&i.ReservedBalance,
+		&i.Currency,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getAccountByUserID = `-- name: GetAccountByUserID :one
@@ -41,21 +81,49 @@ SELECT
     id,
     user_id,
     balance,
+    reserved_balance,
     currency,
     created_at
 FROM accounts
 WHERE user_id = ?
 `
 
-func (q *Queries) GetAccountByUserID(ctx context.Context, userID string) (Account, error) {
+type GetAccountByUserIDRow struct {
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	Balance         string    `json:"balance"`
+	ReservedBalance string    `json:"reserved_balance"`
+	Currency        string    `json:"currency"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+func (q *Queries) GetAccountByUserID(ctx context.Context, userID string) (GetAccountByUserIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getAccountByUserID, userID)
-	var i Account
+	var i GetAccountByUserIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Balance,
+		&i.ReservedBalance,
 		&i.Currency,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const reserveFunds = `-- name: ReserveFunds :execresult
+UPDATE accounts
+SET reserved_balance = reserved_balance + ?
+WHERE id = ?
+  AND balance - reserved_balance >= ?
+`
+
+type ReserveFundsParams struct {
+	ReservedBalance string `json:"reserved_balance"`
+	ID              string `json:"id"`
+	Balance         string `json:"balance"`
+}
+
+func (q *Queries) ReserveFunds(ctx context.Context, arg ReserveFundsParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, reserveFunds, arg.ReservedBalance, arg.ID, arg.Balance)
 }

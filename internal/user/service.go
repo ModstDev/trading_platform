@@ -72,10 +72,11 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*database.
 	}
 
 	err = queries.CreateAccount(ctx, database.CreateAccountParams{
-		ID:       uuid.New().String(),
-		UserID:   userID.String(),
-		Balance:  "0.0000",
-		Currency: "EUR",
+		ID:              uuid.New().String(),
+		UserID:          userID.String(),
+		Balance:         "0.0000",
+		ReservedBalance: "0.0000",
+		Currency:        "EUR",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating account: %w", err)

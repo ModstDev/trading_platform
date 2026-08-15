@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ModstDev/trading_platform/internal/database"
+	"github.com/ModstDev/trading_platform/internal/order"
 	"github.com/ModstDev/trading_platform/internal/user"
 	"github.com/google/uuid"
 )
@@ -25,18 +26,24 @@ type InstrumentService interface {
 	List(ctx context.Context) ([]database.Instrument, error)
 }
 
+type OrderService interface {
+	Create(ctx context.Context, input order.CreateInput) (*database.Order, error)
+}
+
 type Server struct {
 	userService       UserService
 	accountService    AccountService
 	instrumentService InstrumentService
+	orderService      OrderService
 	jwtSecret         string
 }
 
-func NewServer(userService UserService, accountService AccountService, instrumentService InstrumentService, jwtSecret string) *Server {
+func NewServer(userService UserService, accountService AccountService, instrumentService InstrumentService, orderService OrderService, jwtSecret string) *Server {
 	return &Server{
 		userService:       userService,
 		accountService:    accountService,
 		instrumentService: instrumentService,
+		orderService:      orderService,
 		jwtSecret:         jwtSecret,
 	}
 }
@@ -49,5 +56,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /me", s.requireAuth(http.HandlerFunc(s.getMe)))
 	mux.Handle("GET /account", s.requireAuth(http.HandlerFunc(s.getAccount)))
 	mux.HandleFunc("GET /instruments", s.listInstruments)
+	mux.Handle("POST /orders", s.requireAuth(http.HandlerFunc(s.createOrder)))
 	return mux
 }

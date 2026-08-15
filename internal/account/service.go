@@ -25,5 +25,11 @@ func (s *Service) GetByUserID(ctx context.Context, userID uuid.UUID) (*database.
 		return nil, fmt.Errorf("getting account: %w", err)
 	}
 
-	return &account, nil
+	return &database.Account{
+		ID:              account.ID,
+		UserID:          account.UserID,
+		Balance:         account.Balance,
+		ReservedBalance: account.ReservedBalance,
+		CreatedAt:       account.CreatedAt,
+	}, nil
 }

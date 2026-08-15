@@ -12,11 +12,12 @@ import (
 )
 
 type Account struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Balance   string    `json:"balance"`
-	Currency  string    `json:"currency"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	Balance         string    `json:"balance"`
+	Currency        string    `json:"currency"`
+	CreatedAt       time.Time `json:"created_at"`
+	ReservedBalance string    `json:"reserved_balance"`
 }
 
 type Instrument struct {
