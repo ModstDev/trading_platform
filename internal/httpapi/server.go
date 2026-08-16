@@ -29,6 +29,7 @@ type InstrumentService interface {
 type OrderService interface {
 	Create(ctx context.Context, input order.CreateInput) (*database.Order, error)
 	ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]database.Order, error)
+	Cancel(ctx context.Context, orderID uuid.UUID, accountID uuid.UUID) error
 }
 
 type Server struct {
@@ -55,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /users", s.registerUser)
 	mux.HandleFunc("POST /login", s.loginUser)
 	mux.Handle("POST /orders", s.requireAuth(http.HandlerFunc(s.createOrder)))
+	mux.Handle("DELETE /orders/{id}", s.requireAuth(http.HandlerFunc(s.cancelOrder)))
 
 	mux.Handle("GET /me", s.requireAuth(http.HandlerFunc(s.getMe)))
 	mux.Handle("GET /account", s.requireAuth(http.HandlerFunc(s.getAccount)))

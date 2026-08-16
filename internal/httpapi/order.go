@@ -89,3 +89,33 @@ func (s *Server) listOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (s *Server) cancelOrder(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "user ID not found", http.StatusUnauthorized)
+		return
+	}
+
+	account, err := s.accountService.GetByUserID(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
+
+	orderID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid order ID", http.StatusBadRequest)
+	}
+	accountID, err := uuid.Parse(account.ID)
+	if err != nil {
+		http.Error(w, "invalid account ID", http.StatusBadRequest)
+	}
+
+	if err := s.orderService.Cancel(r.Context(), orderID, accountID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

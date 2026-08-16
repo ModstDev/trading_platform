@@ -35,3 +35,9 @@ UPDATE accounts
 SET reserved_balance = reserved_balance + ?
 WHERE id = ?
   AND balance - reserved_balance >= ?;
+
+-- name: ReleaseFunds :execresult
+UPDATE accounts
+SET reserved_balance = reserved_balance - ?
+WHERE id = ?
+    AND reserved_balance >= ?;

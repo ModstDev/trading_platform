@@ -150,3 +150,75 @@ func (s *Service) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]d
 
 	return orders, nil
 }
+
+func (s *Service) Cancel(ctx context.Context, orderID uuid.UUID, accountID uuid.UUID) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	queries := database.New(tx)
+
+	order, err := queries.GetOrderByID(ctx, orderID.String())
+	if err != nil {
+		return fmt.Errorf("getting order: %w", err)
+	}
+
+	if order.AccountID != accountID.String() {
+		return errors.New("order does not belong to account")
+	}
+
+	if order.Status != string(StatusPending) {
+		return errors.New("only pending orders can be cancelled")
+	}
+
+	// Convert the order values back to decimals.
+	quantity, err := decimal.NewFromString(order.Quantity)
+	if err != nil {
+		return fmt.Errorf("parsing order quantity: %w", err)
+	}
+
+	if !order.Price.Valid {
+		return errors.New("order has no price")
+	}
+
+	price, err := decimal.NewFromString(order.Price.String)
+	if err != nil {
+		return fmt.Errorf("parsing order price: %w", err)
+	}
+
+	reservedAmount := quantity.Mul(price)
+
+	result, err := queries.ReleaseFunds(ctx, database.ReleaseFundsParams{
+		ReservedBalance:   reservedAmount.String(),
+		ID:                accountID.String(),
+		ReservedBalance_2: reservedAmount.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("releasing funds: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking released funds: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("failed to release reserved funds")
+	}
+
+	resultErr := queries.CancelOrder(ctx, database.CancelOrderParams{
+		ID:        order.ID,
+		AccountID: accountID.String(),
+	})
+	if resultErr != nil {
+		return fmt.Errorf("cancelling order: %w", resultErr)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("comitting transacation: %w", err)
+	}
+
+	return nil
+}

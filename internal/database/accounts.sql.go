@@ -111,6 +111,23 @@ func (q *Queries) GetAccountByUserID(ctx context.Context, userID string) (GetAcc
 	return i, err
 }
 
+const releaseFunds = `-- name: ReleaseFunds :execresult
+UPDATE accounts
+SET reserved_balance = reserved_balance - ?
+WHERE id = ?
+    AND reserved_balance >= ?
+`
+
+type ReleaseFundsParams struct {
+	ReservedBalance   string `json:"reserved_balance"`
+	ID                string `json:"id"`
+	ReservedBalance_2 string `json:"reserved_balance_2"`
+}
+
+func (q *Queries) ReleaseFunds(ctx context.Context, arg ReleaseFundsParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, releaseFunds, arg.ReservedBalance, arg.ID, arg.ReservedBalance_2)
+}
+
 const reserveFunds = `-- name: ReserveFunds :execresult
 UPDATE accounts
 SET reserved_balance = reserved_balance + ?
