@@ -41,3 +41,11 @@ UPDATE accounts
 SET reserved_balance = reserved_balance - ?
 WHERE id = ?
     AND reserved_balance >= ?;
+
+-- name: SpendReservedFunds :execresult
+UPDATE accounts
+SET
+    balance = balance - ?,
+    reserved_balance = reserved_balance - ?
+WHERE id = ?
+    AND reserved_balance >= ?;

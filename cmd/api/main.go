@@ -10,6 +10,7 @@ import (
 	"github.com/ModstDev/trading_platform/internal/httpapi"
 	"github.com/ModstDev/trading_platform/internal/instrument"
 	"github.com/ModstDev/trading_platform/internal/order"
+	"github.com/ModstDev/trading_platform/internal/position"
 	"github.com/ModstDev/trading_platform/internal/user"
 	"github.com/joho/godotenv"
 )
@@ -33,8 +34,9 @@ func main() {
 	accountService := account.NewService(queries)
 	instrumentService := instrument.NewService(queries)
 	orderService := order.NewService(db, queries)
+	positionService := position.NewService(queries)
 
-	server := httpapi.NewServer(userService, accountService, instrumentService, orderService, cfg.JWT.Secret)
+	server := httpapi.NewServer(userService, accountService, instrumentService, orderService, positionService, cfg.JWT.Secret)
 
 	log.Println("API listening on :8080")
 

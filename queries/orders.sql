@@ -46,3 +46,10 @@ SET status = 'CANCELED'
 WHERE id = ?
     AND account_id = ?
     AND status = 'PENDING';
+
+-- name: ExecuteOrder :execresult
+UPDATE orders
+SET status = 'EXECUTED'
+WHERE id = ?
+    AND account_id = ?
+    AND status = 'PENDING';

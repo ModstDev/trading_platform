@@ -41,6 +41,15 @@ type Order struct {
 	CreatedAt    time.Time      `json:"created_at"`
 }
 
+type Position struct {
+	ID           string    `json:"id"`
+	AccountID    string    `json:"account_id"`
+	InstrumentID string    `json:"instrument_id"`
+	Quantity     string    `json:"quantity"`
+	AveragePrice string    `json:"average_price"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"password_hash"`

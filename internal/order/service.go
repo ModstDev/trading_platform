@@ -222,3 +222,137 @@ func (s *Service) Cancel(ctx context.Context, orderID uuid.UUID, accountID uuid.
 
 	return nil
 }
+
+func (s *Service) Execute(ctx context.Context, orderID uuid.UUID, accountID uuid.UUID) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	queries := database.New(tx)
+
+	order, err := queries.GetOrderByID(ctx, orderID.String())
+	if err != nil {
+		return fmt.Errorf("getting order: %w", err)
+	}
+
+	if order.AccountID != accountID.String() {
+		return errors.New("order does not belong to account")
+	}
+
+	if order.Status != string(StatusPending) {
+		return errors.New("only pending orders can be executed")
+	}
+
+	if !order.Price.Valid {
+		return errors.New("order has no price")
+	}
+
+	quantity, err := decimal.NewFromString(order.Quantity)
+	if err != nil {
+		return fmt.Errorf("parsing quantity: %w", err)
+	}
+
+	price, err := decimal.NewFromString(order.Price.String)
+	if err != nil {
+		return fmt.Errorf("parsing price: %w", err)
+	}
+
+	totalCost := quantity.Mul(price)
+
+	// Spend the money that was previously reserved.
+	result, err := queries.SpendReservedFunds(ctx, database.SpendReservedFundsParams{
+		Balance:           totalCost.String(),
+		ReservedBalance:   totalCost.String(),
+		ID:                accountID.String(),
+		ReservedBalance_2: totalCost.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("spending reserved funs: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking spent funds: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("failed to spend reserved funds")
+	}
+
+	// Find the existing position.
+	position, err := queries.GetPosition(ctx, database.GetPositionParams{
+		AccountID:    accountID.String(),
+		InstrumentID: order.InstrumentID,
+	})
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("getting position: %w", err)
+		}
+
+		// User doesn't own this instrument yet
+		err = queries.CreatePosition(ctx, database.CreatePositionParams{
+			ID:           uuid.New().String(),
+			AccountID:    accountID.String(),
+			InstrumentID: order.InstrumentID,
+			Quantity:     quantity.String(),
+			AveragePrice: price.String(),
+		},
+		)
+		if err != nil {
+			return fmt.Errorf("creating position: %w", err)
+		}
+	} else {
+		// Existing position.
+		oldQuantity, err := decimal.NewFromString(position.Quantity)
+		if err != nil {
+			return fmt.Errorf("parsing existing quantity: %w", err)
+		}
+
+		oldAveragePrice, err := decimal.NewFromString(position.AveragePrice)
+		if err != nil {
+			return fmt.Errorf("parsing existing average price: %w", err)
+		}
+
+		newQuantity := oldQuantity.Add(quantity)
+
+		oldCost := oldQuantity.Mul(oldAveragePrice)
+		newCost := quantity.Mul(price)
+
+		newAveragePrice := oldCost.Add(newCost).Div(newQuantity)
+
+		err = queries.UpdatePosition(ctx, database.UpdatePositionParams{
+			Quantity:     newQuantity.String(),
+			AveragePrice: newAveragePrice.String(),
+			ID:           position.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("updating position: %w", err)
+		}
+	}
+
+	// Mark the order as executed
+	result, err = queries.ExecuteOrder(ctx, database.ExecuteOrderParams{
+		ID:        orderID.String(),
+		AccountID: accountID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("executing order: %w", err)
+	}
+
+	rowsAffected, err = result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking executed order: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("order was not executed")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("comitting transaction: %w", err)
+	}
+
+	return nil
+}

@@ -67,6 +67,23 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) error 
 	return err
 }
 
+const executeOrder = `-- name: ExecuteOrder :execresult
+UPDATE orders
+SET status = 'EXECUTED'
+WHERE id = ?
+    AND account_id = ?
+    AND status = 'PENDING'
+`
+
+type ExecuteOrderParams struct {
+	ID        string `json:"id"`
+	AccountID string `json:"account_id"`
+}
+
+func (q *Queries) ExecuteOrder(ctx context.Context, arg ExecuteOrderParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, executeOrder, arg.ID, arg.AccountID)
+}
+
 const getOrderByID = `-- name: GetOrderByID :one
 SELECT
     id,

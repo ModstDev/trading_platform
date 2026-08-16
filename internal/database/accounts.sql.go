@@ -144,3 +144,28 @@ type ReserveFundsParams struct {
 func (q *Queries) ReserveFunds(ctx context.Context, arg ReserveFundsParams) (sql.Result, error) {
 	return q.db.ExecContext(ctx, reserveFunds, arg.ReservedBalance, arg.ID, arg.Balance)
 }
+
+const spendReservedFunds = `-- name: SpendReservedFunds :execresult
+UPDATE accounts
+SET
+    balance = balance - ?,
+    reserved_balance = reserved_balance - ?
+WHERE id = ?
+    AND reserved_balance >= ?
+`
+
+type SpendReservedFundsParams struct {
+	Balance           string `json:"balance"`
+	ReservedBalance   string `json:"reserved_balance"`
+	ID                string `json:"id"`
+	ReservedBalance_2 string `json:"reserved_balance_2"`
+}
+
+func (q *Queries) SpendReservedFunds(ctx context.Context, arg SpendReservedFundsParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, spendReservedFunds,
+		arg.Balance,
+		arg.ReservedBalance,
+		arg.ID,
+		arg.ReservedBalance_2,
+	)
+}
