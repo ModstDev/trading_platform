@@ -25,5 +25,18 @@ func (s *Service) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]d
 		return nil, fmt.Errorf("listing positions: %w", err)
 	}
 
-	return positions, nil
+	result := make([]database.Position, len(positions))
+
+	for i, position := range positions {
+		result[i] = database.Position{
+			ID:               position.ID,
+			AccountID:        position.AccountID,
+			InstrumentID:     position.InstrumentID,
+			Quantity:         position.Quantity,
+			AveragePrice:     position.AveragePrice,
+			ReservedQuantity: position.ReservedQuantity,
+		}
+	}
+
+	return result, nil
 }

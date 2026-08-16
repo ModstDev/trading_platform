@@ -42,12 +42,13 @@ type Order struct {
 }
 
 type Position struct {
-	ID           string    `json:"id"`
-	AccountID    string    `json:"account_id"`
-	InstrumentID string    `json:"instrument_id"`
-	Quantity     string    `json:"quantity"`
-	AveragePrice string    `json:"average_price"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	AccountID        string    `json:"account_id"`
+	InstrumentID     string    `json:"instrument_id"`
+	Quantity         string    `json:"quantity"`
+	AveragePrice     string    `json:"average_price"`
+	CreatedAt        time.Time `json:"created_at"`
+	ReservedQuantity string    `json:"reserved_quantity"`
 }
 
 type User struct {

@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"time"
 )
 
 const createPosition = `-- name: CreatePosition :exec
@@ -15,17 +17,19 @@ INSERT INTO positions (
     account_id,
     instrument_id,
     quantity,
+    reserved_quantity,
     average_price
 )
-VALUES (?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreatePositionParams struct {
-	ID           string `json:"id"`
-	AccountID    string `json:"account_id"`
-	InstrumentID string `json:"instrument_id"`
-	Quantity     string `json:"quantity"`
-	AveragePrice string `json:"average_price"`
+	ID               string `json:"id"`
+	AccountID        string `json:"account_id"`
+	InstrumentID     string `json:"instrument_id"`
+	Quantity         string `json:"quantity"`
+	ReservedQuantity string `json:"reserved_quantity"`
+	AveragePrice     string `json:"average_price"`
 }
 
 func (q *Queries) CreatePosition(ctx context.Context, arg CreatePositionParams) error {
@@ -34,9 +38,38 @@ func (q *Queries) CreatePosition(ctx context.Context, arg CreatePositionParams) 
 		arg.AccountID,
 		arg.InstrumentID,
 		arg.Quantity,
+		arg.ReservedQuantity,
 		arg.AveragePrice,
 	)
 	return err
+}
+
+const executeSellPosition = `-- name: ExecuteSellPosition :execresult
+UPDATE positions
+SET
+    quantity = quantity - ?,
+    reserved_quantity = reserved_quantity - ?
+WHERE id = ?
+  AND reserved_quantity >= ?
+  AND quantity >= ?
+`
+
+type ExecuteSellPositionParams struct {
+	Quantity           string `json:"quantity"`
+	ReservedQuantity   string `json:"reserved_quantity"`
+	ID                 string `json:"id"`
+	ReservedQuantity_2 string `json:"reserved_quantity_2"`
+	Quantity_2         string `json:"quantity_2"`
+}
+
+func (q *Queries) ExecuteSellPosition(ctx context.Context, arg ExecuteSellPositionParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, executeSellPosition,
+		arg.Quantity,
+		arg.ReservedQuantity,
+		arg.ID,
+		arg.ReservedQuantity_2,
+		arg.Quantity_2,
+	)
 }
 
 const getPosition = `-- name: GetPosition :one
@@ -45,6 +78,7 @@ SELECT
     account_id,
     instrument_id,
     quantity,
+    reserved_quantity,
     average_price,
     created_at
 FROM positions
@@ -57,14 +91,25 @@ type GetPositionParams struct {
 	InstrumentID string `json:"instrument_id"`
 }
 
-func (q *Queries) GetPosition(ctx context.Context, arg GetPositionParams) (Position, error) {
+type GetPositionRow struct {
+	ID               string    `json:"id"`
+	AccountID        string    `json:"account_id"`
+	InstrumentID     string    `json:"instrument_id"`
+	Quantity         string    `json:"quantity"`
+	ReservedQuantity string    `json:"reserved_quantity"`
+	AveragePrice     string    `json:"average_price"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+func (q *Queries) GetPosition(ctx context.Context, arg GetPositionParams) (GetPositionRow, error) {
 	row := q.db.QueryRowContext(ctx, getPosition, arg.AccountID, arg.InstrumentID)
-	var i Position
+	var i GetPositionRow
 	err := row.Scan(
 		&i.ID,
 		&i.AccountID,
 		&i.InstrumentID,
 		&i.Quantity,
+		&i.ReservedQuantity,
 		&i.AveragePrice,
 		&i.CreatedAt,
 	)
@@ -77,6 +122,7 @@ SELECT
     account_id,
     instrument_id,
     quantity,
+    reserved_quantity,
     average_price,
     created_at
 FROM positions
@@ -85,20 +131,31 @@ WHERE account_id = ?
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListPositionsByAccountID(ctx context.Context, accountID string) ([]Position, error) {
+type ListPositionsByAccountIDRow struct {
+	ID               string    `json:"id"`
+	AccountID        string    `json:"account_id"`
+	InstrumentID     string    `json:"instrument_id"`
+	Quantity         string    `json:"quantity"`
+	ReservedQuantity string    `json:"reserved_quantity"`
+	AveragePrice     string    `json:"average_price"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+func (q *Queries) ListPositionsByAccountID(ctx context.Context, accountID string) ([]ListPositionsByAccountIDRow, error) {
 	rows, err := q.db.QueryContext(ctx, listPositionsByAccountID, accountID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Position
+	var items []ListPositionsByAccountIDRow
 	for rows.Next() {
-		var i Position
+		var i ListPositionsByAccountIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AccountID,
 			&i.InstrumentID,
 			&i.Quantity,
+			&i.ReservedQuantity,
 			&i.AveragePrice,
 			&i.CreatedAt,
 		); err != nil {
@@ -115,21 +172,62 @@ func (q *Queries) ListPositionsByAccountID(ctx context.Context, accountID string
 	return items, nil
 }
 
+const releasePositionQuantity = `-- name: ReleasePositionQuantity :execresult
+UPDATE positions
+SET reserved_quantity = reserved_quantity - ?
+WHERE id = ?
+  AND reserved_quantity >= ?
+`
+
+type ReleasePositionQuantityParams struct {
+	ReservedQuantity   string `json:"reserved_quantity"`
+	ID                 string `json:"id"`
+	ReservedQuantity_2 string `json:"reserved_quantity_2"`
+}
+
+func (q *Queries) ReleasePositionQuantity(ctx context.Context, arg ReleasePositionQuantityParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, releasePositionQuantity, arg.ReservedQuantity, arg.ID, arg.ReservedQuantity_2)
+}
+
+const reservePositionQuantity = `-- name: ReservePositionQuantity :execresult
+UPDATE positions
+SET reserved_quantity = reserved_quantity + ?
+WHERE id = ?
+    AND quantity - reserved_quantity >= ?
+`
+
+type ReservePositionQuantityParams struct {
+	ReservedQuantity string `json:"reserved_quantity"`
+	ID               string `json:"id"`
+	Quantity         string `json:"quantity"`
+}
+
+func (q *Queries) ReservePositionQuantity(ctx context.Context, arg ReservePositionQuantityParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, reservePositionQuantity, arg.ReservedQuantity, arg.ID, arg.Quantity)
+}
+
 const updatePosition = `-- name: UpdatePosition :exec
 UPDATE positions
 SET
     quantity = ?,
+    reserved_quantity = ?,
     average_price = ?
 WHERE id = ?
 `
 
 type UpdatePositionParams struct {
-	Quantity     string `json:"quantity"`
-	AveragePrice string `json:"average_price"`
-	ID           string `json:"id"`
+	Quantity         string `json:"quantity"`
+	ReservedQuantity string `json:"reserved_quantity"`
+	AveragePrice     string `json:"average_price"`
+	ID               string `json:"id"`
 }
 
 func (q *Queries) UpdatePosition(ctx context.Context, arg UpdatePositionParams) error {
-	_, err := q.db.ExecContext(ctx, updatePosition, arg.Quantity, arg.AveragePrice, arg.ID)
+	_, err := q.db.ExecContext(ctx, updatePosition,
+		arg.Quantity,
+		arg.ReservedQuantity,
+		arg.AveragePrice,
+		arg.ID,
+	)
 	return err
 }

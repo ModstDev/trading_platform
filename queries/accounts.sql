@@ -49,3 +49,8 @@ SET
     reserved_balance = reserved_balance - ?
 WHERE id = ?
     AND reserved_balance >= ?;
+
+-- name: ReceiveFunds :exec
+UPDATE accounts
+SET balance = balance + ?
+WHERE id = ?;
