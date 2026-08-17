@@ -74,7 +74,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*database.
 	err = queries.CreateAccount(ctx, database.CreateAccountParams{
 		ID:              uuid.New().String(),
 		UserID:          userID.String(),
-		Balance:         "0.0000",
+		Balance:         "1000.0000",
 		ReservedBalance: "0.0000",
 		Currency:        "EUR",
 	})

@@ -368,11 +368,12 @@ func (s *Service) Execute(ctx context.Context, orderID uuid.UUID, accountID uuid
 
 			// User doesn't own this instrument yet
 			err = queries.CreatePosition(ctx, database.CreatePositionParams{
-				ID:           uuid.New().String(),
-				AccountID:    accountID.String(),
-				InstrumentID: order.InstrumentID,
-				Quantity:     quantity.String(),
-				AveragePrice: price.String(),
+				ID:               uuid.New().String(),
+				AccountID:        accountID.String(),
+				InstrumentID:     order.InstrumentID,
+				Quantity:         quantity.String(),
+				ReservedQuantity: "0",
+				AveragePrice:     price.String(),
 			},
 			)
 			if err != nil {

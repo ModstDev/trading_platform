@@ -142,10 +142,12 @@ func (s *Server) executeOrder(w http.ResponseWriter, r *http.Request) {
 	accountID, err := uuid.Parse(account.ID)
 	if err != nil {
 		http.Error(w, "invalid account ID", http.StatusBadRequest)
+		return
 	}
 
 	if err := s.orderService.Execute(r.Context(), orderID, accountID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
