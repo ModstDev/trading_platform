@@ -61,7 +61,11 @@ LIMIT 1;
 -- name: UpdateFilledQuantity :execresult
 UPDATE orders
 SET
-    filled_quantity = filled_quantity + ?
+    filled_quantity = filled_quantity + ?,
+    status = CASE
+        WHEN filled_quantity + ? >= quantity THEN 'EXECUTED'
+        ELSE 'PENDING'
+    END
 WHERE id = ?
   AND status = 'PENDING'
   AND quantity - filled_quantity >= ?;

@@ -41,10 +41,6 @@ func (s *Service) MatchOrder(
 		return fmt.Errorf("getting order: %w", err)
 	}
 
-	if order.Status != string(order.Status) {
-		return errors.New("invalid order status")
-	}
-
 	if order.Status != "PENDING" {
 		return nil
 	}
@@ -115,12 +111,7 @@ func (s *Service) MatchOrder(
 		return errors.New("no remaining quantity to execute")
 	}
 
-	// For now we only support complete fills.
-	if !remaining.Equal(matchRemaining) {
-		return errors.New("partial fills are not implemented yet")
-	}
-
-	executionQuantity := remaining
+	executionQuantity := decimal.Min(remaining, matchRemaining)
 
 	executionPrice, err := decimal.NewFromString(match.Price.String)
 	if err != nil {
@@ -164,9 +155,10 @@ func (s *Service) MatchOrder(
 	result, err := queries.UpdateFilledQuantity(
 		ctx,
 		database.UpdateFilledQuantityParams{
-			FilledQuantity: executionQuantity.String(),
-			ID:             buy.ID,
-			Quantity:       executionQuantity.String(),
+			FilledQuantity:   executionQuantity.String(),
+			FilledQuantity_2: executionQuantity.String(),
+			ID:               buy.ID,
+			Quantity:         executionQuantity.String(),
 		},
 	)
 	if err != nil {
@@ -185,9 +177,10 @@ func (s *Service) MatchOrder(
 	result, err = queries.UpdateFilledQuantity(
 		ctx,
 		database.UpdateFilledQuantityParams{
-			FilledQuantity: executionQuantity.String(),
-			ID:             sell.ID,
-			Quantity:       executionQuantity.String(),
+			FilledQuantity:   executionQuantity.String(),
+			FilledQuantity_2: executionQuantity.String(),
+			ID:               sell.ID,
+			Quantity:         executionQuantity.String(),
 		},
 	)
 	if err != nil {
@@ -232,29 +225,6 @@ func (s *Service) MatchOrder(
 	)
 	if err != nil {
 		return fmt.Errorf("creating seller execution: %w", err)
-	}
-
-	// Both orders are completely filled.
-	_, err = queries.ExecuteOrder(
-		ctx,
-		database.ExecuteOrderParams{
-			ID:        buy.ID,
-			AccountID: buy.AccountID,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("executing buyer order: %w", err)
-	}
-
-	_, err = queries.ExecuteOrder(
-		ctx,
-		database.ExecuteOrderParams{
-			ID:        sell.ID,
-			AccountID: sell.AccountID,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("executing seller order: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -315,7 +285,7 @@ func (s *Service) executeBuy(
 	} else if err != nil {
 		return fmt.Errorf("getting buyer positions: %w", err)
 	} else {
-		oldQuantity, err := decimal.NewFromString(position.AveragePrice)
+		oldQuantity, err := decimal.NewFromString(position.Quantity)
 		if err != nil {
 			return fmt.Errorf("parsing buyer average price: %w", err)
 		}
