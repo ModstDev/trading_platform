@@ -40,15 +40,16 @@ type Instrument struct {
 }
 
 type Order struct {
-	ID           string         `json:"id"`
-	AccountID    string         `json:"account_id"`
-	InstrumentID string         `json:"instrument_id"`
-	Side         string         `json:"side"`
-	Type         string         `json:"type"`
-	Quantity     string         `json:"quantity"`
-	Price        sql.NullString `json:"price"`
-	Status       string         `json:"status"`
-	CreatedAt    time.Time      `json:"created_at"`
+	ID             string         `json:"id"`
+	AccountID      string         `json:"account_id"`
+	InstrumentID   string         `json:"instrument_id"`
+	Side           string         `json:"side"`
+	Type           string         `json:"type"`
+	Quantity       string         `json:"quantity"`
+	Price          sql.NullString `json:"price"`
+	Status         string         `json:"status"`
+	CreatedAt      time.Time      `json:"created_at"`
+	FilledQuantity string         `json:"filled_quantity"`
 }
 
 type Position struct {

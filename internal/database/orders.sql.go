@@ -84,17 +84,78 @@ func (q *Queries) ExecuteOrder(ctx context.Context, arg ExecuteOrderParams) (sql
 	return q.db.ExecContext(ctx, executeOrder, arg.ID, arg.AccountID)
 }
 
+const findMatchingBuyOrder = `-- name: FindMatchingBuyOrder :one
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'BUY'
+  AND status = 'PENDING'
+  AND price >= ?
+  AND quantity > filled_quantity
+ORDER BY price DESC, created_at ASC
+LIMIT 1
+`
+
+type FindMatchingBuyOrderParams struct {
+	InstrumentID string         `json:"instrument_id"`
+	Price        sql.NullString `json:"price"`
+}
+
+func (q *Queries) FindMatchingBuyOrder(ctx context.Context, arg FindMatchingBuyOrderParams) (Order, error) {
+	row := q.db.QueryRowContext(ctx, findMatchingBuyOrder, arg.InstrumentID, arg.Price)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.InstrumentID,
+		&i.Side,
+		&i.Type,
+		&i.Quantity,
+		&i.Price,
+		&i.Status,
+		&i.CreatedAt,
+		&i.FilledQuantity,
+	)
+	return i, err
+}
+
+const findMatchingSellOrder = `-- name: FindMatchingSellOrder :one
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'SELL'
+  AND status = 'PENDING'
+  AND price <= ?
+  AND quantity > filled_quantity
+ORDER BY price ASC, created_at ASC
+LIMIT 1
+`
+
+type FindMatchingSellOrderParams struct {
+	InstrumentID string         `json:"instrument_id"`
+	Price        sql.NullString `json:"price"`
+}
+
+func (q *Queries) FindMatchingSellOrder(ctx context.Context, arg FindMatchingSellOrderParams) (Order, error) {
+	row := q.db.QueryRowContext(ctx, findMatchingSellOrder, arg.InstrumentID, arg.Price)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.InstrumentID,
+		&i.Side,
+		&i.Type,
+		&i.Quantity,
+		&i.Price,
+		&i.Status,
+		&i.CreatedAt,
+		&i.FilledQuantity,
+	)
+	return i, err
+}
+
 const getOrderByID = `-- name: GetOrderByID :one
-SELECT
-    id,
-    account_id,
-    instrument_id,
-    side,
-    type,
-    quantity,
-    price,
-    status,
-    created_at
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
 FROM orders
 WHERE id = ?
 `
@@ -112,21 +173,13 @@ func (q *Queries) GetOrderByID(ctx context.Context, id string) (Order, error) {
 		&i.Price,
 		&i.Status,
 		&i.CreatedAt,
+		&i.FilledQuantity,
 	)
 	return i, err
 }
 
 const listOrdersByAccountID = `-- name: ListOrdersByAccountID :many
-SELECT
-    id,
-    account_id,
-    instrument_id,
-    side,
-    type,
-    quantity,
-    price,
-    status,
-    created_at
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
 FROM orders
 WHERE account_id = ?
 ORDER BY created_at DESC
@@ -151,6 +204,7 @@ func (q *Queries) ListOrdersByAccountID(ctx context.Context, accountID string) (
 			&i.Price,
 			&i.Status,
 			&i.CreatedAt,
+			&i.FilledQuantity,
 		); err != nil {
 			return nil, err
 		}

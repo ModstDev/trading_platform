@@ -12,30 +12,12 @@ INSERT INTO orders (
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetOrderByID :one
-SELECT
-    id,
-    account_id,
-    instrument_id,
-    side,
-    type,
-    quantity,
-    price,
-    status,
-    created_at
+SELECT *
 FROM orders
 WHERE id = ?;
 
 -- name: ListOrdersByAccountID :many
-SELECT
-    id,
-    account_id,
-    instrument_id,
-    side,
-    type,
-    quantity,
-    price,
-    status,
-    created_at
+SELECT *
 FROM orders
 WHERE account_id = ?
 ORDER BY created_at DESC;
@@ -53,3 +35,25 @@ SET status = 'EXECUTED'
 WHERE id = ?
     AND account_id = ?
     AND status = 'PENDING';
+
+-- name: FindMatchingSellOrder :one
+SELECT *
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'SELL'
+  AND status = 'PENDING'
+  AND price <= ?
+  AND quantity > filled_quantity
+ORDER BY price ASC, created_at ASC
+LIMIT 1;
+
+-- name: FindMatchingBuyOrder :one
+SELECT *
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'BUY'
+  AND status = 'PENDING'
+  AND price >= ?
+  AND quantity > filled_quantity
+ORDER BY price DESC, created_at ASC
+LIMIT 1;
