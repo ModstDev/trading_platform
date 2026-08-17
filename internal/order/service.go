@@ -449,6 +449,16 @@ func (s *Service) Execute(ctx context.Context, orderID uuid.UUID, accountID uuid
 		}
 	}
 
+	//Add order to execution table
+	err = queries.CreateExecution(ctx, database.CreateExecutionParams{
+		ID:           uuid.New().String(),
+		OrderID:      order.ID,
+		AccountID:    accountID.String(),
+		InstrumentID: order.InstrumentID,
+		Quantity:     quantity.String(),
+		Price:        price.String(),
+	})
+
 	// Mark the order as executed
 	result, err := queries.ExecuteOrder(ctx, database.ExecuteOrderParams{
 		ID:        orderID.String(),

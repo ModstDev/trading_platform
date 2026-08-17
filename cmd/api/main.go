@@ -7,6 +7,7 @@ import (
 	"github.com/ModstDev/trading_platform/internal/account"
 	"github.com/ModstDev/trading_platform/internal/config"
 	"github.com/ModstDev/trading_platform/internal/database"
+	"github.com/ModstDev/trading_platform/internal/execution"
 	"github.com/ModstDev/trading_platform/internal/httpapi"
 	"github.com/ModstDev/trading_platform/internal/instrument"
 	"github.com/ModstDev/trading_platform/internal/order"
@@ -35,8 +36,9 @@ func main() {
 	instrumentService := instrument.NewService(queries)
 	orderService := order.NewService(db, queries)
 	positionService := position.NewService(queries)
+	executionService := execution.NewService(queries)
 
-	server := httpapi.NewServer(userService, accountService, instrumentService, orderService, positionService, cfg.JWT.Secret)
+	server := httpapi.NewServer(userService, accountService, instrumentService, orderService, positionService, executionService, cfg.JWT.Secret)
 
 	log.Println("API listening on :8080")
 

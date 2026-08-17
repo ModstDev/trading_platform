@@ -20,6 +20,16 @@ type Account struct {
 	ReservedBalance string    `json:"reserved_balance"`
 }
 
+type Execution struct {
+	ID           string    `json:"id"`
+	OrderID      string    `json:"order_id"`
+	AccountID    string    `json:"account_id"`
+	InstrumentID string    `json:"instrument_id"`
+	Quantity     string    `json:"quantity"`
+	Price        string    `json:"price"`
+	ExecutedAt   time.Time `json:"executed_at"`
+}
+
 type Instrument struct {
 	ID        string    `json:"id"`
 	Symbol    string    `json:"symbol"`
