@@ -218,3 +218,22 @@ func (q *Queries) ListOrdersByAccountID(ctx context.Context, accountID string) (
 	}
 	return items, nil
 }
+
+const updateFilledQuantity = `-- name: UpdateFilledQuantity :execresult
+UPDATE orders
+SET
+    filled_quantity = filled_quantity + ?
+WHERE id = ?
+  AND status = 'PENDING'
+  AND quantity - filled_quantity >= ?
+`
+
+type UpdateFilledQuantityParams struct {
+	FilledQuantity string `json:"filled_quantity"`
+	ID             string `json:"id"`
+	Quantity       string `json:"quantity"`
+}
+
+func (q *Queries) UpdateFilledQuantity(ctx context.Context, arg UpdateFilledQuantityParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updateFilledQuantity, arg.FilledQuantity, arg.ID, arg.Quantity)
+}

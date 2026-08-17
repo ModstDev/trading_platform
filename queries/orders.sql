@@ -57,3 +57,11 @@ WHERE instrument_id = ?
   AND quantity > filled_quantity
 ORDER BY price DESC, created_at ASC
 LIMIT 1;
+
+-- name: UpdateFilledQuantity :execresult
+UPDATE orders
+SET
+    filled_quantity = filled_quantity + ?
+WHERE id = ?
+  AND status = 'PENDING'
+  AND quantity - filled_quantity >= ?;
