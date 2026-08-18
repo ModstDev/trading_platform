@@ -33,10 +33,7 @@ func (s *Service) MatchOrder(
 
 	queries := database.New(tx)
 
-	order, err := queries.GetOrderByID(
-		ctx,
-		orderID.String(),
-	)
+	order, err := queries.GetOrderByID(ctx, orderID.String())
 	if err != nil {
 		return fmt.Errorf("getting order: %w", err)
 	}
@@ -49,182 +46,196 @@ func (s *Service) MatchOrder(
 		return errors.New("order has no price")
 	}
 
-	var match database.Order
-
-	switch order.Side {
-	case "BUY":
-		match, err = queries.FindMatchingSellOrder(
-			ctx,
-			database.FindMatchingSellOrderParams{
-				InstrumentID: order.InstrumentID,
-				Price:        order.Price,
-			},
-		)
-
-	case "SELL":
-		match, err = queries.FindMatchingBuyOrder(
-			ctx,
-			database.FindMatchingBuyOrderParams{
-				InstrumentID: order.InstrumentID,
-				Price:        order.Price,
-			},
-		)
-
-	default:
-		return errors.New("invalid order side")
-	}
-
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// No opposite order yet.
-			return tx.Commit()
-		}
-
-		return fmt.Errorf("finding matching order: %w", err)
-	}
-
-	quantity, err := decimal.NewFromString(order.Quantity)
+	orderQuantity, err := decimal.NewFromString(order.Quantity)
 	if err != nil {
 		return fmt.Errorf("parsing order quantity: %w", err)
 	}
 
-	filledQuantity, err := decimal.NewFromString(order.FilledQuantity)
+	orderFilled, err := decimal.NewFromString(order.FilledQuantity)
 	if err != nil {
 		return fmt.Errorf("parsing filled quantity: %w", err)
 	}
 
-	remaining := quantity.Sub(filledQuantity)
+	remaining := orderQuantity.Sub(orderFilled)
 
-	matchQuantity, err := decimal.NewFromString(match.Quantity)
-	if err != nil {
-		return fmt.Errorf("parsing matching quantity: %w", err)
+	if remaining.LessThanOrEqual(decimal.Zero) {
+		return nil
 	}
 
-	matchFilled, err := decimal.NewFromString(match.FilledQuantity)
-	if err != nil {
-		return fmt.Errorf("parsing matching filled quantity: %w", err)
-	}
+	for remaining.GreaterThan(decimal.Zero) {
+		var match database.Order
 
-	matchRemaining := matchQuantity.Sub(matchFilled)
+		switch order.Side {
+		case "BUY":
+			match, err = queries.FindMatchingSellOrder(
+				ctx,
+				database.FindMatchingSellOrderParams{
+					InstrumentID: order.InstrumentID,
+					Price:        order.Price,
+					ID:           order.ID,
+				},
+			)
 
-	if remaining.LessThanOrEqual(decimal.Zero) || matchRemaining.LessThanOrEqual(decimal.Zero) {
-		return errors.New("no remaining quantity to execute")
-	}
+		case "SELL":
+			match, err = queries.FindMatchingBuyOrder(
+				ctx,
+				database.FindMatchingBuyOrderParams{
+					InstrumentID: order.InstrumentID,
+					Price:        order.Price,
+					ID:           order.ID,
+				},
+			)
 
-	executionQuantity := decimal.Min(remaining, matchRemaining)
+		default:
+			return errors.New("invalid order side")
+		}
 
-	executionPrice, err := decimal.NewFromString(match.Price.String)
-	if err != nil {
-		return fmt.Errorf("parsing execution price: %w", err)
-	}
+		if errors.Is(err, sql.ErrNoRows) {
+			break
+		}
 
-	var buy database.Order
-	var sell database.Order
+		if err != nil {
+			return fmt.Errorf("finding matching order: %w", err)
+		}
 
-	if order.Side == "BUY" {
-		buy = order
-		sell = match
-	} else {
-		buy = match
-		sell = order
-	}
+		matchQuantity, err := decimal.NewFromString(match.Quantity)
+		if err != nil {
+			return fmt.Errorf("parsing matching quantity: %w", err)
+		}
 
-	// Buyer.
-	if err := s.executeBuy(
-		ctx,
-		queries,
-		buy,
-		executionQuantity,
-		executionPrice,
-	); err != nil {
-		return err
-	}
+		matchFilled, err := decimal.NewFromString(match.FilledQuantity)
+		if err != nil {
+			return fmt.Errorf("parsing matching filled quantity: %w", err)
+		}
 
-	// Seller.
-	if err := s.executeSell(
-		ctx,
-		queries,
-		sell,
-		executionQuantity,
-		executionPrice,
-	); err != nil {
-		return err
-	}
+		matchRemaining := matchQuantity.Sub(matchFilled)
 
-	// Mark both orders as completely filled.
-	result, err := queries.UpdateFilledQuantity(
-		ctx,
-		database.UpdateFilledQuantityParams{
-			FilledQuantity:   executionQuantity.String(),
-			FilledQuantity_2: executionQuantity.String(),
-			ID:               buy.ID,
-			Quantity:         executionQuantity.String(),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("updating buyer fill: %w", err)
-	}
+		if matchRemaining.LessThanOrEqual(decimal.Zero) {
+			continue
+		}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking buyer fill: %w", err)
-	}
+		executionQuantity := decimal.Min(
+			remaining,
+			matchRemaining,
+		)
 
-	if rowsAffected == 0 {
-		return errors.New("failed to fill buyer order")
-	}
+		executionPrice, err := decimal.NewFromString(match.Price.String)
+		if err != nil {
+			return fmt.Errorf("parsing execution price: %w", err)
+		}
 
-	result, err = queries.UpdateFilledQuantity(
-		ctx,
-		database.UpdateFilledQuantityParams{
-			FilledQuantity:   executionQuantity.String(),
-			FilledQuantity_2: executionQuantity.String(),
-			ID:               sell.ID,
-			Quantity:         executionQuantity.String(),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("updating seller fill: %w", err)
-	}
+		var buy database.Order
+		var sell database.Order
 
-	rowsAffected, err = result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking seller fill: %w", err)
-	}
+		if order.Side == "BUY" {
+			buy = order
+			sell = match
+		} else {
+			buy = match
+			sell = order
+		}
 
-	if rowsAffected == 0 {
-		return errors.New("failed to fill seller order")
-	}
+		// Execute buyer side.
+		if err := s.executeBuy(
+			ctx,
+			queries,
+			buy,
+			executionQuantity,
+			executionPrice,
+		); err != nil {
+			return fmt.Errorf("executing buy: %w", err)
+		}
 
-	// Record the actual trade.
-	err = queries.CreateExecution(
-		ctx,
-		database.CreateExecutionParams{
-			ID:           uuid.New().String(),
-			OrderID:      buy.ID,
-			AccountID:    buy.AccountID,
-			InstrumentID: buy.InstrumentID,
-			Quantity:     executionQuantity.String(),
-			Price:        executionPrice.String(),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("creating buyer execution: %w", err)
-	}
+		// Execute seller side.
+		if err := s.executeSell(
+			ctx,
+			queries,
+			sell,
+			executionQuantity,
+			executionPrice,
+		); err != nil {
+			return fmt.Errorf("executing sell: %w", err)
+		}
 
-	err = queries.CreateExecution(
-		ctx,
-		database.CreateExecutionParams{
-			ID:           uuid.New().String(),
-			OrderID:      sell.ID,
-			AccountID:    sell.AccountID,
-			InstrumentID: sell.InstrumentID,
-			Quantity:     executionQuantity.String(),
-			Price:        executionPrice.String(),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("creating seller execution: %w", err)
+		// Update original order.
+		result, err := queries.UpdateFilledQuantity(
+			ctx,
+			database.UpdateFilledQuantityParams{
+				FilledQuantity:   executionQuantity.String(),
+				FilledQuantity_2: executionQuantity.String(),
+				ID:               order.ID,
+				Quantity:         executionQuantity.String(),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("updating order fill: %w", err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("checking order fill: %w", err)
+		}
+
+		if rowsAffected != 1 {
+			return errors.New("failed to update order fill")
+		}
+
+		// Update matching order.
+		result, err = queries.UpdateFilledQuantity(
+			ctx,
+			database.UpdateFilledQuantityParams{
+				FilledQuantity:   executionQuantity.String(),
+				FilledQuantity_2: executionQuantity.String(),
+				ID:               match.ID,
+				Quantity:         executionQuantity.String(),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("updating matching order fill: %w", err)
+		}
+
+		rowsAffected, err = result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("checking order fill: %w", err)
+		}
+
+		if rowsAffected != 1 {
+			return errors.New("failed to update order fill")
+		}
+
+		// Record buyer execution.
+		err = queries.CreateExecution(
+			ctx,
+			database.CreateExecutionParams{
+				ID:           uuid.New().String(),
+				OrderID:      buy.ID,
+				AccountID:    buy.AccountID,
+				InstrumentID: buy.InstrumentID,
+				Quantity:     executionQuantity.String(),
+				Price:        executionPrice.String(),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("creating buyer execution: %w", err)
+		}
+
+		// Record seller execution.
+		err = queries.CreateExecution(
+			ctx,
+			database.CreateExecutionParams{
+				ID:           uuid.New().String(),
+				OrderID:      sell.ID,
+				AccountID:    sell.AccountID,
+				InstrumentID: sell.InstrumentID,
+				Quantity:     executionQuantity.String(),
+				Price:        executionPrice.String(),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("creating seller execution: %w", err)
+		}
+
+		remaining = remaining.Sub(executionQuantity)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -243,15 +254,23 @@ func (s *Service) executeBuy(
 ) error {
 	buyAccountID := buy.AccountID
 
-	totalCost := quantity.Mul(price)
+	limitPrice, err := decimal.NewFromString(buy.Price.String)
+	if err != nil {
+		return fmt.Errorf("parsing buyer limit price: %w", err)
+	}
+
+	actualCost := quantity.Mul(price)
+	reservedCost := quantity.Mul(limitPrice)
+
+	priceDifference := reservedCost.Sub(actualCost)
 
 	// The BUY order already served this money.
 	// Move it from reserved to spent.
 	result, err := queries.SpendReservedFunds(ctx, database.SpendReservedFundsParams{
-		Balance:           totalCost.String(),
-		ReservedBalance:   totalCost.String(),
+		Balance:           actualCost.String(),
+		ReservedBalance:   actualCost.String(),
 		ID:                buyAccountID,
-		ReservedBalance_2: totalCost.String(),
+		ReservedBalance_2: actualCost.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("spending buyer funds: %w", err)
@@ -266,6 +285,19 @@ func (s *Service) executeBuy(
 		return errors.New("buyer has insufficient reserved funds")
 	}
 
+	if priceDifference.GreaterThan(decimal.Zero) {
+		_, err := queries.ReleaseFunds(
+			ctx,
+			database.ReleaseFundsParams{
+				ReservedBalance:   priceDifference.String(),
+				ID:                buyAccountID,
+				ReservedBalance_2: priceDifference.String(),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("releasing unused buyer funds: %w", err)
+		}
+	}
 	position, err := queries.GetPosition(ctx, database.GetPositionParams{
 		AccountID:    buy.AccountID,
 		InstrumentID: buy.InstrumentID,

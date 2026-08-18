@@ -12,7 +12,7 @@ import (
 
 const cancelOrder = `-- name: CancelOrder :exec
 UPDATE orders
-SET status = 'CANCELED'
+SET status = 'CANCELLED'
 WHERE id = ?
     AND account_id = ?
     AND status = 'PENDING'
@@ -91,18 +91,20 @@ WHERE instrument_id = ?
   AND side = 'BUY'
   AND status = 'PENDING'
   AND price >= ?
-  AND quantity > filled_quantity
+  AND id != ?
 ORDER BY price DESC, created_at ASC
 LIMIT 1
+FOR UPDATE
 `
 
 type FindMatchingBuyOrderParams struct {
 	InstrumentID string         `json:"instrument_id"`
 	Price        sql.NullString `json:"price"`
+	ID           string         `json:"id"`
 }
 
 func (q *Queries) FindMatchingBuyOrder(ctx context.Context, arg FindMatchingBuyOrderParams) (Order, error) {
-	row := q.db.QueryRowContext(ctx, findMatchingBuyOrder, arg.InstrumentID, arg.Price)
+	row := q.db.QueryRowContext(ctx, findMatchingBuyOrder, arg.InstrumentID, arg.Price, arg.ID)
 	var i Order
 	err := row.Scan(
 		&i.ID,
@@ -126,18 +128,20 @@ WHERE instrument_id = ?
   AND side = 'SELL'
   AND status = 'PENDING'
   AND price <= ?
-  AND quantity > filled_quantity
+  AND id != ?
 ORDER BY price ASC, created_at ASC
 LIMIT 1
+FOR UPDATE
 `
 
 type FindMatchingSellOrderParams struct {
 	InstrumentID string         `json:"instrument_id"`
 	Price        sql.NullString `json:"price"`
+	ID           string         `json:"id"`
 }
 
 func (q *Queries) FindMatchingSellOrder(ctx context.Context, arg FindMatchingSellOrderParams) (Order, error) {
-	row := q.db.QueryRowContext(ctx, findMatchingSellOrder, arg.InstrumentID, arg.Price)
+	row := q.db.QueryRowContext(ctx, findMatchingSellOrder, arg.InstrumentID, arg.Price, arg.ID)
 	var i Order
 	err := row.Scan(
 		&i.ID,
@@ -222,11 +226,11 @@ func (q *Queries) ListOrdersByAccountID(ctx context.Context, accountID string) (
 const updateFilledQuantity = `-- name: UpdateFilledQuantity :execresult
 UPDATE orders
 SET
-    filled_quantity = filled_quantity + ?,
     status = CASE
         WHEN filled_quantity + ? >= quantity THEN 'EXECUTED'
         ELSE 'PENDING'
-    END
+    END,
+    filled_quantity = filled_quantity + ?
 WHERE id = ?
   AND status = 'PENDING'
   AND quantity - filled_quantity >= ?

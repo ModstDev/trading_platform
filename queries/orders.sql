@@ -24,7 +24,7 @@ ORDER BY created_at DESC;
 
 -- name: CancelOrder :exec
 UPDATE orders
-SET status = 'CANCELED'
+SET status = 'CANCELLED'
 WHERE id = ?
     AND account_id = ?
     AND status = 'PENDING';
@@ -43,9 +43,10 @@ WHERE instrument_id = ?
   AND side = 'SELL'
   AND status = 'PENDING'
   AND price <= ?
-  AND quantity > filled_quantity
+  AND id != ?
 ORDER BY price ASC, created_at ASC
-LIMIT 1;
+LIMIT 1
+FOR UPDATE;
 
 -- name: FindMatchingBuyOrder :one
 SELECT *
@@ -54,18 +55,19 @@ WHERE instrument_id = ?
   AND side = 'BUY'
   AND status = 'PENDING'
   AND price >= ?
-  AND quantity > filled_quantity
+  AND id != ?
 ORDER BY price DESC, created_at ASC
-LIMIT 1;
+LIMIT 1
+FOR UPDATE;
 
 -- name: UpdateFilledQuantity :execresult
 UPDATE orders
 SET
-    filled_quantity = filled_quantity + ?,
     status = CASE
         WHEN filled_quantity + ? >= quantity THEN 'EXECUTED'
         ELSE 'PENDING'
-    END
+    END,
+    filled_quantity = filled_quantity + ?
 WHERE id = ?
   AND status = 'PENDING'
   AND quantity - filled_quantity >= ?;
