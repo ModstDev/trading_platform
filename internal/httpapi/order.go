@@ -15,6 +15,7 @@ type CreateOrderRequest struct {
 	Type         order.Type       `json:"type"`
 	Quantity     *decimal.Decimal `json:"quantity"`
 	Price        *decimal.Decimal `json:"price"`
+	MaxCost      *decimal.Decimal `json:"max_cost"`
 }
 
 func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
@@ -28,11 +29,13 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
 	}
 
 	account, err := s.accountService.GetByUserID(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
+		return
 	}
 
 	accountID, err := uuid.Parse(account.ID)
@@ -47,6 +50,7 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
 		Type:         request.Type,
 		Quantity:     request.Quantity,
 		Price:        request.Price,
+		MaxCost:      request.MaxCost,
 	})
 
 	if err != nil {

@@ -28,6 +28,19 @@ func (q *Queries) CancelOrder(ctx context.Context, arg CancelOrderParams) (sql.R
 	return q.db.ExecContext(ctx, cancelOrder, arg.ID, arg.AccountID)
 }
 
+const cancelUnfilledMarketOrder = `-- name: CancelUnfilledMarketOrder :exec
+UPDATE orders
+SET status = 'CANCELED'
+WHERE id = ?
+  AND status = 'PENDING'
+  AND type = 'MARKET'
+`
+
+func (q *Queries) CancelUnfilledMarketOrder(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, cancelUnfilledMarketOrder, id)
+	return err
+}
+
 const createOrder = `-- name: CreateOrder :exec
 INSERT INTO orders (
     id,
@@ -37,9 +50,10 @@ INSERT INTO orders (
     type,
     quantity,
     price,
+    max_cost,
     status
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateOrderParams struct {
@@ -50,6 +64,7 @@ type CreateOrderParams struct {
 	Type         string         `json:"type"`
 	Quantity     string         `json:"quantity"`
 	Price        sql.NullString `json:"price"`
+	MaxCost      sql.NullString `json:"max_cost"`
 	Status       string         `json:"status"`
 }
 
@@ -62,6 +77,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) error 
 		arg.Type,
 		arg.Quantity,
 		arg.Price,
+		arg.MaxCost,
 		arg.Status,
 	)
 	return err
@@ -84,8 +100,80 @@ func (q *Queries) ExecuteOrder(ctx context.Context, arg ExecuteOrderParams) (sql
 	return q.db.ExecContext(ctx, executeOrder, arg.ID, arg.AccountID)
 }
 
+const findBestBuyOrder = `-- name: FindBestBuyOrder :one
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity, max_cost
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'BUY'
+  AND status = 'PENDING'
+  AND id != ?
+ORDER BY price DESC, created_at ASC
+LIMIT 1
+FOR UPDATE
+`
+
+type FindBestBuyOrderParams struct {
+	InstrumentID string `json:"instrument_id"`
+	ID           string `json:"id"`
+}
+
+func (q *Queries) FindBestBuyOrder(ctx context.Context, arg FindBestBuyOrderParams) (Order, error) {
+	row := q.db.QueryRowContext(ctx, findBestBuyOrder, arg.InstrumentID, arg.ID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.InstrumentID,
+		&i.Side,
+		&i.Type,
+		&i.Quantity,
+		&i.Price,
+		&i.Status,
+		&i.CreatedAt,
+		&i.FilledQuantity,
+		&i.MaxCost,
+	)
+	return i, err
+}
+
+const findBestSellOrder = `-- name: FindBestSellOrder :one
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity, max_cost
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'SELL'
+  AND status = 'PENDING'
+  AND id != ?
+ORDER BY price ASC, created_at ASC
+LIMIT 1
+FOR UPDATE
+`
+
+type FindBestSellOrderParams struct {
+	InstrumentID string `json:"instrument_id"`
+	ID           string `json:"id"`
+}
+
+func (q *Queries) FindBestSellOrder(ctx context.Context, arg FindBestSellOrderParams) (Order, error) {
+	row := q.db.QueryRowContext(ctx, findBestSellOrder, arg.InstrumentID, arg.ID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.InstrumentID,
+		&i.Side,
+		&i.Type,
+		&i.Quantity,
+		&i.Price,
+		&i.Status,
+		&i.CreatedAt,
+		&i.FilledQuantity,
+		&i.MaxCost,
+	)
+	return i, err
+}
+
 const findMatchingBuyOrder = `-- name: FindMatchingBuyOrder :one
-SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity, max_cost
 FROM orders
 WHERE instrument_id = ?
   AND side = 'BUY'
@@ -117,12 +205,13 @@ func (q *Queries) FindMatchingBuyOrder(ctx context.Context, arg FindMatchingBuyO
 		&i.Status,
 		&i.CreatedAt,
 		&i.FilledQuantity,
+		&i.MaxCost,
 	)
 	return i, err
 }
 
 const findMatchingSellOrder = `-- name: FindMatchingSellOrder :one
-SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity, max_cost
 FROM orders
 WHERE instrument_id = ?
   AND side = 'SELL'
@@ -154,12 +243,13 @@ func (q *Queries) FindMatchingSellOrder(ctx context.Context, arg FindMatchingSel
 		&i.Status,
 		&i.CreatedAt,
 		&i.FilledQuantity,
+		&i.MaxCost,
 	)
 	return i, err
 }
 
 const getOrderByID = `-- name: GetOrderByID :one
-SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity, max_cost
 FROM orders
 WHERE id = ?
 `
@@ -178,12 +268,13 @@ func (q *Queries) GetOrderByID(ctx context.Context, id string) (Order, error) {
 		&i.Status,
 		&i.CreatedAt,
 		&i.FilledQuantity,
+		&i.MaxCost,
 	)
 	return i, err
 }
 
 const listOrdersByAccountID = `-- name: ListOrdersByAccountID :many
-SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity
+SELECT id, account_id, instrument_id, side, type, quantity, price, status, created_at, filled_quantity, max_cost
 FROM orders
 WHERE account_id = ?
 ORDER BY created_at DESC
@@ -209,6 +300,7 @@ func (q *Queries) ListOrdersByAccountID(ctx context.Context, accountID string) (
 			&i.Status,
 			&i.CreatedAt,
 			&i.FilledQuantity,
+			&i.MaxCost,
 		); err != nil {
 			return nil, err
 		}

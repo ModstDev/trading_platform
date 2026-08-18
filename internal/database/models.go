@@ -50,6 +50,7 @@ type Order struct {
 	Status         string         `json:"status"`
 	CreatedAt      time.Time      `json:"created_at"`
 	FilledQuantity string         `json:"filled_quantity"`
+	MaxCost        sql.NullString `json:"max_cost"`
 }
 
 type Position struct {

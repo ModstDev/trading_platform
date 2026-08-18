@@ -53,19 +53,50 @@ type CreateInput struct {
 	Type         Type
 	Quantity     *decimal.Decimal
 	Price        *decimal.Decimal
+	MaxCost      *decimal.Decimal
 }
 
 func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Order, error) {
-	if input.Type != TypeLimit {
-		return nil, errors.New("only limit orders are currently supported")
-	}
-
 	if input.Side != SideBuy && input.Side != SideSell {
 		return nil, errors.New("invalid order side")
 	}
 
-	if input.Price == nil {
-		return nil, errors.New("price is required for limit orders")
+	if input.Type != TypeLimit && input.Type != TypeMarket {
+		return nil, errors.New("invalid order type")
+	}
+
+	if input.Type == TypeLimit {
+		if input.Price == nil {
+			return nil, errors.New("price is required for limit orders")
+		}
+
+		if input.Price.LessThanOrEqual(decimal.Zero) {
+			return nil, errors.New("price must be greater than zero")
+		}
+
+		if input.MaxCost != nil {
+			return nil, errors.New("max_cost is only valid for market buy orders")
+		}
+	}
+
+	if input.Type == TypeMarket {
+		if input.Price != nil {
+			return nil, errors.New("market orders cannot have a price")
+		}
+
+		if input.Side == SideBuy {
+			if input.MaxCost == nil {
+				return nil, errors.New("max_cost is required for market buy orders")
+			}
+
+			if input.MaxCost.LessThanOrEqual(decimal.Zero) {
+				return nil, errors.New("max_cost must be greater than zero")
+			}
+		}
+
+		if input.Side == SideSell && input.MaxCost != nil {
+			return nil, errors.New("max_cost is only valid for market buy orders")
+		}
 	}
 
 	if input.Quantity.LessThanOrEqual(decimal.Zero) {
@@ -74,10 +105,6 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Orde
 
 	if input.Quantity == nil || input.Quantity.LessThanOrEqual(decimal.Zero) {
 		return nil, errors.New("quantity must be greater than zero")
-	}
-
-	if input.Price.LessThanOrEqual(decimal.Zero) {
-		return nil, errors.New("price must be greater than zero")
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -89,13 +116,25 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Orde
 	queries := database.New(tx)
 
 	if input.Side == SideBuy {
-		requiredFunds := input.Quantity.Mul(*input.Price)
+		var requiredFunds decimal.Decimal
+
+		switch input.Type {
+		case TypeLimit:
+			requiredFunds = input.Quantity.Mul(*input.Price)
+
+		case TypeMarket:
+			requiredFunds = *input.MaxCost
+
+		default:
+			return nil, errors.New("invalid order type")
+		}
 
 		result, err := queries.ReserveFunds(ctx, database.ReserveFundsParams{
 			ReservedBalance: requiredFunds.String(),
 			ID:              input.AccountID.String(),
 			Balance:         requiredFunds.String(),
 		})
+
 		if err != nil {
 			return nil, fmt.Errorf("reserving funds: %w", err)
 		}
@@ -159,6 +198,15 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Orde
 		}
 	}
 
+	var maxCost sql.NullString
+
+	if input.MaxCost != nil {
+		maxCost = sql.NullString{
+			String: input.MaxCost.String(),
+			Valid:  true,
+		}
+	}
+
 	err = queries.CreateOrder(ctx, database.CreateOrderParams{
 		ID:           orderID.String(),
 		AccountID:    input.AccountID.String(),
@@ -167,6 +215,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Orde
 		Type:         string(input.Type),
 		Quantity:     input.Quantity.String(),
 		Price:        price,
+		MaxCost:      maxCost,
 		Status:       string(StatusPending),
 	})
 
@@ -219,30 +268,39 @@ func (s *Service) Cancel(ctx context.Context, orderID uuid.UUID, accountID uuid.
 
 	// Convert the order values back to decimals.
 	quantity, err := decimal.NewFromString(order.Quantity)
-	if err != nil {
-		return fmt.Errorf("parsing order quantity: %w", err)
-	}
-
 	if order.Side == string(SideBuy) {
-		if !order.Price.Valid {
-			return errors.New("order has no price")
-		}
+		var reservedAmount decimal.Decimal
 
-		price, err := decimal.NewFromString(order.Price.String)
-		if err != nil {
-			return fmt.Errorf("parsing order price: %w", err)
-		}
+		if order.Type == string(TypeLimit) {
+			if !order.Price.Valid {
+				return errors.New("limit order has no price")
+			}
 
-		reservedAmount := quantity.Mul(price)
+			price, err := decimal.NewFromString(order.Price.String)
+			if err != nil {
+				return fmt.Errorf("parsing order price: %w", err)
+			}
+
+			reservedAmount = quantity.Mul(price)
+
+		} else if order.Type == string(TypeMarket) {
+			if !order.MaxCost.Valid {
+				return errors.New("market order has no max cost")
+			}
+
+			reservedAmount, err = decimal.NewFromString(order.MaxCost.String)
+			if err != nil {
+				return fmt.Errorf("parsing max cost: %w", err)
+			}
+		} else {
+			return errors.New("invalid order type")
+		}
 
 		result, err := queries.ReleaseFunds(ctx, database.ReleaseFundsParams{
 			ReservedBalance:   reservedAmount.String(),
 			ID:                accountID.String(),
 			ReservedBalance_2: reservedAmount.String(),
 		})
-		if err != nil {
-			return fmt.Errorf("releasing funds: %w", err)
-		}
 
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
@@ -328,8 +386,8 @@ func (s *Service) Execute(ctx context.Context, orderID uuid.UUID, accountID uuid
 		return errors.New("only pending orders can be executed")
 	}
 
-	if !order.Price.Valid {
-		return errors.New("order has no price")
+	if order.Type == "LIMIT" && !order.Price.Valid {
+		return errors.New("limit order has no price")
 	}
 
 	quantity, err := decimal.NewFromString(order.Quantity)

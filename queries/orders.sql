@@ -7,9 +7,10 @@ INSERT INTO orders (
     type,
     quantity,
     price,
+    max_cost,
     status
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetOrderByID :one
 SELECT *
@@ -61,6 +62,28 @@ ORDER BY price DESC, created_at ASC
 LIMIT 1
 FOR UPDATE;
 
+-- name: FindBestSellOrder :one
+SELECT *
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'SELL'
+  AND status = 'PENDING'
+  AND id != ?
+ORDER BY price ASC, created_at ASC
+LIMIT 1
+FOR UPDATE;
+
+-- name: FindBestBuyOrder :one
+SELECT *
+FROM orders
+WHERE instrument_id = ?
+  AND side = 'BUY'
+  AND status = 'PENDING'
+  AND id != ?
+ORDER BY price DESC, created_at ASC
+LIMIT 1
+FOR UPDATE;
+
 -- name: UpdateFilledQuantity :execresult
 UPDATE orders
 SET
@@ -72,3 +95,10 @@ SET
 WHERE id = ?
   AND status = 'PENDING'
   AND quantity - filled_quantity >= ?;
+
+-- name: CancelUnfilledMarketOrder :exec
+UPDATE orders
+SET status = 'CANCELED'
+WHERE id = ?
+  AND status = 'PENDING'
+  AND type = 'MARKET';

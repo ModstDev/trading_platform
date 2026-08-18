@@ -42,8 +42,8 @@ func (s *Service) MatchOrder(
 		return nil
 	}
 
-	if !order.Price.Valid {
-		return errors.New("order has no price")
+	if order.Type == "LIMIT" && !order.Price.Valid {
+		return errors.New("limit order has no price")
 	}
 
 	orderQuantity, err := decimal.NewFromString(order.Quantity)
@@ -62,32 +62,63 @@ func (s *Service) MatchOrder(
 		return nil
 	}
 
+	var totalBuyCost decimal.Decimal
+
 	for remaining.GreaterThan(decimal.Zero) {
 		var match database.Order
 
-		switch order.Side {
-		case "BUY":
-			match, err = queries.FindMatchingSellOrder(
-				ctx,
-				database.FindMatchingSellOrderParams{
-					InstrumentID: order.InstrumentID,
-					Price:        order.Price,
-					ID:           order.ID,
-				},
-			)
+		switch order.Type {
+		case "LIMIT":
+			switch order.Side {
+			case "BUY":
+				match, err = queries.FindMatchingSellOrder(
+					ctx,
+					database.FindMatchingSellOrderParams{
+						InstrumentID: order.InstrumentID,
+						Price:        order.Price,
+						ID:           order.ID,
+					},
+				)
 
-		case "SELL":
-			match, err = queries.FindMatchingBuyOrder(
-				ctx,
-				database.FindMatchingBuyOrderParams{
-					InstrumentID: order.InstrumentID,
-					Price:        order.Price,
-					ID:           order.ID,
-				},
-			)
+			case "SELL":
+				match, err = queries.FindMatchingBuyOrder(
+					ctx,
+					database.FindMatchingBuyOrderParams{
+						InstrumentID: order.InstrumentID,
+						Price:        order.Price,
+						ID:           order.ID,
+					},
+				)
 
+			default:
+				return errors.New("invalid order side")
+			}
+
+		case "MARKET":
+			switch order.Side {
+			case "BUY":
+				match, err = queries.FindBestSellOrder(
+					ctx,
+					database.FindBestSellOrderParams{
+						InstrumentID: order.InstrumentID,
+						ID:           order.ID,
+					},
+				)
+
+			case "SELL":
+				match, err = queries.FindBestBuyOrder(
+					ctx,
+					database.FindBestBuyOrderParams{
+						InstrumentID: order.InstrumentID,
+						ID:           order.ID,
+					},
+				)
+
+			default:
+				return errors.New("invalid order side")
+			}
 		default:
-			return errors.New("invalid order side")
+			return errors.New("invalid order type")
 		}
 
 		if errors.Is(err, sql.ErrNoRows) {
@@ -122,6 +153,12 @@ func (s *Service) MatchOrder(
 		executionPrice, err := decimal.NewFromString(match.Price.String)
 		if err != nil {
 			return fmt.Errorf("parsing execution price: %w", err)
+		}
+
+		if order.Side == "BUY" {
+			totalBuyCost = totalBuyCost.Add(
+				executionQuantity.Mul(executionPrice),
+			)
 		}
 
 		var buy database.Order
@@ -238,6 +275,44 @@ func (s *Service) MatchOrder(
 		remaining = remaining.Sub(executionQuantity)
 	}
 
+	if order.Type == "MARKET" &&
+		order.Side == "BUY" &&
+		remaining.GreaterThanOrEqual(decimal.Zero) {
+
+		maxCost, err := decimal.NewFromString(order.MaxCost.String)
+		if err != nil {
+			return fmt.Errorf("parsing market max cost: %w", err)
+		}
+
+		// totalBuyCost needs to contain the sum of all
+		// actual execution costs.
+		unusedFunds := maxCost.Sub(totalBuyCost)
+
+		if unusedFunds.GreaterThan(decimal.Zero) {
+			_, err = queries.ReleaseFunds(
+				ctx,
+				database.ReleaseFundsParams{
+					ReservedBalance:   unusedFunds.String(),
+					ID:                order.AccountID,
+					ReservedBalance_2: unusedFunds.String(),
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("releasing unused market funds: %w", err)
+			}
+		}
+	}
+
+	if order.Type == "MARKET" && remaining.GreaterThan(decimal.Zero) {
+		err = queries.CancelUnfilledMarketOrder(
+			ctx,
+			order.ID,
+		)
+		if err != nil {
+			return fmt.Errorf("canceling unfilled market order: %w", err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("committing match: %w", err)
 	}
@@ -254,15 +329,35 @@ func (s *Service) executeBuy(
 ) error {
 	buyAccountID := buy.AccountID
 
-	limitPrice, err := decimal.NewFromString(buy.Price.String)
-	if err != nil {
-		return fmt.Errorf("parsing buyer limit price: %w", err)
-	}
-
 	actualCost := quantity.Mul(price)
-	reservedCost := quantity.Mul(limitPrice)
 
-	priceDifference := reservedCost.Sub(actualCost)
+	// LIMIT orders reserve based on their limit price.
+	// MARKET orders reserve based on max_cost.
+
+	var reservedCost decimal.Decimal
+
+	switch buy.Type {
+	case "LIMIT":
+		limitPrice, err := decimal.NewFromString(buy.Price.String)
+		if err != nil {
+			return fmt.Errorf("parsing buyer limit price: %w", err)
+		}
+
+		reservedCost = quantity.Mul(limitPrice)
+
+	case "MARKET":
+		maxCost, err := decimal.NewFromString(buy.MaxCost.String)
+		if err != nil {
+			return fmt.Errorf("parsing buyer max cost: %w", err)
+		}
+
+		// The order's total reservation is max_cost, not
+		// quantity * execution price.
+		reservedCost = maxCost
+
+	default:
+		return errors.New("invalid buyer order type")
+	}
 
 	// The BUY order already served this money.
 	// Move it from reserved to spent.
@@ -285,17 +380,29 @@ func (s *Service) executeBuy(
 		return errors.New("buyer has insufficient reserved funds")
 	}
 
-	if priceDifference.GreaterThan(decimal.Zero) {
-		_, err := queries.ReleaseFunds(
-			ctx,
-			database.ReleaseFundsParams{
-				ReservedBalance:   priceDifference.String(),
-				ID:                buyAccountID,
-				ReservedBalance_2: priceDifference.String(),
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("releasing unused buyer funds: %w", err)
+	// For LIMIT orders, release the difference between
+	// the reserved limit price and the actual execution price.
+	//
+	// For MARKET orders, we DON'T release max_cost - actualCost
+	// here because a single market order can execute against
+	// multiple sellers. We handle its remaining reservation
+	// after matching finishes.
+
+	if buy.Type == "LIMIT" {
+		priceDifference := reservedCost.Sub(actualCost)
+
+		if priceDifference.GreaterThan(decimal.Zero) {
+			_, err := queries.ReleaseFunds(
+				ctx,
+				database.ReleaseFundsParams{
+					ReservedBalance:   priceDifference.String(),
+					ID:                buyAccountID,
+					ReservedBalance_2: priceDifference.String(),
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("releasing unused buyer funds: %w", err)
+			}
 		}
 	}
 	position, err := queries.GetPosition(ctx, database.GetPositionParams{
