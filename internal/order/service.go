@@ -282,12 +282,21 @@ func (s *Service) Cancel(ctx context.Context, orderID uuid.UUID, accountID uuid.
 		}
 	}
 
-	resultErr := queries.CancelOrder(ctx, database.CancelOrderParams{
+	result, err := queries.CancelOrder(ctx, database.CancelOrderParams{
 		ID:        order.ID,
 		AccountID: accountID.String(),
 	})
-	if resultErr != nil {
-		return fmt.Errorf("cancelling order: %w", resultErr)
+	if err != nil {
+		return fmt.Errorf("cancelling order: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking canceled order: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("order cannot be canceled")
 	}
 
 	if err := tx.Commit(); err != nil {

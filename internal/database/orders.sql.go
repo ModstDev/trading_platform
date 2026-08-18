@@ -10,12 +10,13 @@ import (
 	"database/sql"
 )
 
-const cancelOrder = `-- name: CancelOrder :exec
+const cancelOrder = `-- name: CancelOrder :execresult
 UPDATE orders
-SET status = 'CANCELLED'
+SET status = 'CANCELED'
 WHERE id = ?
-    AND account_id = ?
-    AND status = 'PENDING'
+  AND account_id = ?
+  AND status = 'PENDING'
+  AND filled_quantity = 0
 `
 
 type CancelOrderParams struct {
@@ -23,9 +24,8 @@ type CancelOrderParams struct {
 	AccountID string `json:"account_id"`
 }
 
-func (q *Queries) CancelOrder(ctx context.Context, arg CancelOrderParams) error {
-	_, err := q.db.ExecContext(ctx, cancelOrder, arg.ID, arg.AccountID)
-	return err
+func (q *Queries) CancelOrder(ctx context.Context, arg CancelOrderParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, cancelOrder, arg.ID, arg.AccountID)
 }
 
 const createOrder = `-- name: CreateOrder :exec

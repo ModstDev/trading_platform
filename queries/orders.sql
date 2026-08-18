@@ -22,12 +22,13 @@ FROM orders
 WHERE account_id = ?
 ORDER BY created_at DESC;
 
--- name: CancelOrder :exec
+-- name: CancelOrder :execresult
 UPDATE orders
-SET status = 'CANCELLED'
+SET status = 'CANCELED'
 WHERE id = ?
-    AND account_id = ?
-    AND status = 'PENDING';
+  AND account_id = ?
+  AND status = 'PENDING'
+  AND filled_quantity = 0;
 
 -- name: ExecuteOrder :execresult
 UPDATE orders
