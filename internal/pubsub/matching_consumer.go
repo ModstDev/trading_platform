@@ -11,7 +11,9 @@ import (
 )
 
 func (n *NATS) StartMatchingConsumer(ctx context.Context, matchingService *matching.Service) error {
-	_, err := n.conn.Subscribe(OrderCreatedSubject,
+	_, err := n.conn.QueueSubscribe(
+		OrderCreatedSubject,
+		"matching",
 		func(msg *nats.Msg) {
 			orderID, err := uuid.Parse(string(msg.Data))
 			if err != nil {
