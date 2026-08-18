@@ -12,6 +12,12 @@ services:
       - "3307:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
+  nats:
+    image: nats:latest
+    container_name: trading-platform-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
 
 volumes:
   mariadb_data:

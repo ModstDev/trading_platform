@@ -52,9 +52,13 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
 		Price:        request.Price,
 		MaxCost:      request.MaxCost,
 	})
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.nats.PublishOrderCreated(createdOrder.ID); err != nil {
+		http.Error(w, "failed to publish order created event", http.StatusInternalServerError)
 		return
 	}
 

@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Trading Platform Tester</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>Trading Platform</h1><span id="authStatus">Not logged in</span></header>
+<main>
+<section class="card"><h2>API</h2>
+<label>API Base URL<input id="apiBase" value="http://localhost:8080"></label></section>
+
+<div class="grid">
+<section class="card"><h2>Register</h2>
+<label>Email<input id="registerEmail" type="email"></label>
+<label>Password<input id="registerPassword" type="password" value="password123"></label>
+<button onclick="register()">Register</button></section>
+
+<section class="card"><h2>Login</h2>
+<label>Email<input id="loginEmail" type="email"></label>
+<label>Password<input id="loginPassword" type="password" value="password123"></label>
+<button onclick="login()">Login</button><button class="secondary" onclick="logout()">Logout</button>
+</section></div>
+
+<section class="card"><h2>Account</h2><button onclick="loadAccount()">Refresh</button><pre id="accountOutput">—</pre></section>
+
+<section class="card"><h2>Instruments</h2><button onclick="loadInstruments()">Refresh</button><pre id="instrumentsOutput">—</pre></section>
+
+<section class="card"><h2>Create Order</h2>
+<div class="grid">
+<label>Instrument ID<input id="instrumentId"></label>
+<label>Side<select id="side"><option>BUY</option><option>SELL</option></select></label>
+<label>Type<select id="orderType"><option>LIMIT</option><option>MARKET</option></select></label>
+<label>Quantity<input id="quantity" type="number" step="0.0001" value="1"></label>
+<label>Price<input id="price" type="number" step="0.0001" value="200"></label>
+</div>
+<button onclick="createOrder()">Create Order</button><pre id="orderOutput">—</pre></section>
+
+<section class="card"><h2>Orders</h2><button onclick="loadOrders()">Refresh Orders</button><div id="orders">—</div></section>
+
+<div class="grid">
+<section class="card"><h2>Positions</h2><button onclick="loadPositions()">Refresh</button><pre id="positionsOutput">—</pre></section>
+<section class="card"><h2>Executions</h2><button onclick="loadExecutions()">Refresh</button><pre id="executionsOutput">—</pre></section>
+</div>
+
+<section class="card"><h2>API Output</h2><pre id="output">Ready.</pre></section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

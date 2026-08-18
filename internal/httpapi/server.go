@@ -6,6 +6,7 @@ import (
 
 	"github.com/ModstDev/trading_platform/internal/database"
 	"github.com/ModstDev/trading_platform/internal/order"
+	"github.com/ModstDev/trading_platform/internal/pubsub"
 	"github.com/ModstDev/trading_platform/internal/user"
 	"github.com/google/uuid"
 )
@@ -54,6 +55,7 @@ type Server struct {
 	executionService  ExecutionService
 	matchingService   MatchingService
 	jwtSecret         string
+	nats              *pubsub.NATS
 }
 
 func NewServer(
@@ -65,6 +67,7 @@ func NewServer(
 	executionService ExecutionService,
 	matchingService MatchingService,
 	jwtSecret string,
+	nats *pubsub.NATS,
 ) *Server {
 	return &Server{
 		userService:       userService,
@@ -75,6 +78,7 @@ func NewServer(
 		executionService:  executionService,
 		matchingService:   matchingService,
 		jwtSecret:         jwtSecret,
+		nats:              nats,
 	}
 }
 
@@ -96,5 +100,20 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("DELETE /orders/{id}", s.requireAuth(http.HandlerFunc(s.cancelOrder)))
 
-	return mux
+	return cors(mux)
+}
+
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
