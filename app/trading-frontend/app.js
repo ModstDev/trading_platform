@@ -55,30 +55,68 @@ async function createOrder(){
     await loadOrders(); await loadAccount();
   }catch(e){$("orderOutput").textContent=e.message;output(e.message)}
 }
-async function loadOrders(){
-  try{
-    const data=await request("/orders"), box=$("orders"); box.innerHTML="";
-    if(!Array.isArray(data)||!data.length){box.textContent="No orders.";return}
-    for(const o of data){
-      const id=o.id??o.ID, status=o.status??o.Status, q=o.quantity??o.Quantity;
-      const f=o.filled_quantity??o.FilledQuantity, side=o.side??o.Side;
-      const type=o.type??o.Type, price=o.price??o.Price;
-      const d=document.createElement("div");d.className="order";
-      d.innerHTML=`<b>${side} ${type}</b><br>ID: ${id}<br>Quantity: ${q}<br>
-        Filled: ${f}<br>Price: ${price??"—"}<br>Status: ${status}<br>
-        <button class="danger" onclick="cancelOrder('${id}')">Cancel</button>
-        <button class="match" onclick="matchOrder('${id}')">Match</button>`;
-      box.appendChild(d);
+async function loadOrders() {
+  try {
+    const data = await request("/orders");
+    const box = $("orders");
+
+    box.innerHTML = "";
+
+    if (!Array.isArray(data) || !data.length) {
+      box.textContent = "No orders.";
+      return;
     }
-  }catch(e){$("orders").textContent=e.message}
+
+    for (const o of data) {
+      const id = o.id ?? o.ID;
+      const status = o.status ?? o.Status;
+      const quantity = o.quantity ?? o.Quantity;
+      const filledQuantity = o.filled_quantity ?? o.FilledQuantity;
+      const side = o.side ?? o.Side;
+      const type = o.type ?? o.Type;
+
+      let price = o.price ?? o.Price;
+
+      // Handle sql.NullString / similar JSON object.
+      if (price && typeof price === "object") {
+        if ("String" in price) {
+          price = price.String;
+        } else if ("string" in price) {
+          price = price.string;
+        } else if ("Valid" in price && !price.Valid) {
+          price = "—";
+        } else {
+          price = JSON.stringify(price);
+        }
+      }
+
+      const div = document.createElement("div");
+      div.className = "order";
+
+      div.innerHTML = `
+        <b>${side} ${type}</b><br>
+        ID: ${id}<br>
+        Quantity: ${quantity}<br>
+        Filled: ${filledQuantity}<br>
+        Price: ${price ?? "—"}<br>
+        Status: ${status}<br>
+
+        <button
+          class="danger"
+          onclick="cancelOrder('${id}')">
+          Cancel
+        </button>
+      `;
+
+      box.appendChild(div);
+    }
+  } catch (e) {
+    $("orders").textContent = e.message;
+  }
 }
 async function cancelOrder(id){
   if(!confirm("Cancel order?"))return;
   try{output(await request(`/orders/${id}`,{method:"DELETE"}));await loadOrders();await loadAccount()}
-  catch(e){output(e.message)}
-}
-async function matchOrder(id){
-  try{output(await request(`/orders/${id}/match`,{method:"POST"}));await loadOrders();await loadPositions();await loadExecutions();await loadAccount()}
   catch(e){output(e.message)}
 }
 async function loadPositions(){

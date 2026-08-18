@@ -42,10 +42,6 @@ type ExecutionService interface {
 	ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]database.Execution, error)
 }
 
-type MatchingService interface {
-	MatchOrder(ctx context.Context, orderID uuid.UUID) error
-}
-
 type Server struct {
 	userService       UserService
 	accountService    AccountService
@@ -53,7 +49,6 @@ type Server struct {
 	orderService      OrderService
 	positionService   PositionService
 	executionService  ExecutionService
-	matchingService   MatchingService
 	jwtSecret         string
 	nats              *pubsub.NATS
 }
@@ -65,7 +60,6 @@ func NewServer(
 	orderService OrderService,
 	positionService PositionService,
 	executionService ExecutionService,
-	matchingService MatchingService,
 	jwtSecret string,
 	nats *pubsub.NATS,
 ) *Server {
@@ -76,7 +70,6 @@ func NewServer(
 		orderService:      orderService,
 		positionService:   positionService,
 		executionService:  executionService,
-		matchingService:   matchingService,
 		jwtSecret:         jwtSecret,
 		nats:              nats,
 	}
@@ -89,7 +82,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login", s.loginUser)
 	mux.Handle("POST /orders", s.requireAuth(http.HandlerFunc(s.createOrder)))
 	mux.Handle("POST /orders/{id}/execute", s.requireAuth(http.HandlerFunc(s.executeOrder)))
-	mux.Handle("POST /orders/{id}/match", s.requireAuth(http.HandlerFunc(s.matchOrder)))
 
 	mux.Handle("GET /me", s.requireAuth(http.HandlerFunc(s.getMe)))
 	mux.Handle("GET /account", s.requireAuth(http.HandlerFunc(s.getAccount)))

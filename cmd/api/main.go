@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/ModstDev/trading_platform/internal/execution"
 	"github.com/ModstDev/trading_platform/internal/httpapi"
 	"github.com/ModstDev/trading_platform/internal/instrument"
-	"github.com/ModstDev/trading_platform/internal/matching"
 	"github.com/ModstDev/trading_platform/internal/order"
 	"github.com/ModstDev/trading_platform/internal/position"
 	"github.com/ModstDev/trading_platform/internal/pubsub"
@@ -40,7 +38,6 @@ func main() {
 	orderService := order.NewService(db, queries)
 	positionService := position.NewService(queries)
 	executionService := execution.NewService(queries)
-	matchingService := matching.NewService(db)
 
 	natsClient, err := pubsub.NewNATS("nats://localhost:4222")
 	if err != nil {
@@ -48,12 +45,16 @@ func main() {
 	}
 	defer natsClient.Close()
 
-	ctx := context.Background()
-	if err := natsClient.StartMatchingConsumer(ctx, matchingService); err != nil {
-		log.Fatal(err)
-	}
-
-	server := httpapi.NewServer(userService, accountService, instrumentService, orderService, positionService, executionService, matchingService, cfg.JWT.Secret, natsClient)
+	server := httpapi.NewServer(
+		userService,
+		accountService,
+		instrumentService,
+		orderService,
+		positionService,
+		executionService,
+		cfg.JWT.Secret,
+		natsClient,
+	)
 
 	log.Println("API listening on :8080")
 
