@@ -3,6 +3,6 @@
 /bin/
 /dist/
 
-scripts/
+scripts_tests/
 
 *.log

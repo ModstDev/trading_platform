@@ -1,17 +1,22 @@
 package pubsub
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 const (
 	OrderCreatedSubject = "orders.created"
+	OrderStream         = "ORDERS"
+	MatchingConsumer    = "matching"
 )
 
 type NATS struct {
 	conn *nats.Conn
+	js   jetstream.JetStream
 }
 
 func NewNATS(url string) (*NATS, error) {
@@ -20,8 +25,15 @@ func NewNATS(url string) (*NATS, error) {
 		return nil, fmt.Errorf("connecting to NATS: %w", err)
 	}
 
+	js, err := jetstream.New(conn)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("creating JetStream: %w", err)
+	}
+
 	return &NATS{
 		conn: conn,
+		js:   js,
 	}, nil
 }
 
@@ -29,10 +41,11 @@ func (n *NATS) Close() {
 	n.conn.Close()
 }
 
-func (n *NATS) PublishOrderCreated(orderID string) error {
-	if err := n.conn.Publish(OrderCreatedSubject, []byte(orderID)); err != nil {
+func (n *NATS) PublishOrderCreated(ctx context.Context, orderID string) error {
+	_, err := n.js.Publish(ctx, OrderCreatedSubject, []byte(orderID))
+	if err != nil {
 		return fmt.Errorf("publishing order created event: %w", err)
 	}
 
-	return n.conn.Flush()
+	return nil
 }
