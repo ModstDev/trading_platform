@@ -1,52 +1,173 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Trading Platform Tester</title>
+  <title>TradeDesk</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header><h1>Trading Platform</h1><span id="authStatus">Not logged in</span></header>
-<main>
-<section class="card"><h2>API</h2>
-<label>API Base URL<input id="apiBase" value="http://localhost:8080"></label></section>
+  <div id="toast" class="toast"></div>
 
-<div class="grid">
-<section class="card"><h2>Register</h2>
-<label>Email<input id="registerEmail" type="email"></label>
-<label>Password<input id="registerPassword" type="password" value="password123"></label>
-<button onclick="register()">Register</button></section>
+  <section id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="logo">Trade<span>Desk</span></div>
+      <p class="auth-subtitle">Brokerage platform</p>
 
-<section class="card"><h2>Login</h2>
-<label>Email<input id="loginEmail" type="email"></label>
-<label>Password<input id="loginPassword" type="password" value="password123"></label>
-<button onclick="login()">Login</button><button class="secondary" onclick="logout()">Logout</button>
-</section></div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Sign in</button>
+        <button class="auth-tab" data-tab="register">Create account</button>
+      </div>
 
-<section class="card"><h2>Account</h2><button onclick="loadAccount()">Refresh</button><pre id="accountOutput">—</pre></section>
+      <form id="login-form" class="auth-form">
+        <label>Email<input id="login-email" type="email" autocomplete="email" required></label>
+        <label>Password<input id="login-password" type="password" autocomplete="current-password" required></label>
+        <button class="button primary wide" type="submit">Sign in</button>
+      </form>
 
-<section class="card"><h2>Instruments</h2><button onclick="loadInstruments()">Refresh</button><pre id="instrumentsOutput">—</pre></section>
+      <form id="register-form" class="auth-form hidden">
+        <label>Email<input id="register-email" type="email" autocomplete="email" required></label>
+        <label>Password<input id="register-password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <div class="hint">Password must contain at least 8 characters.</div>
+        <button class="button primary wide" type="submit">Create account</button>
+      </form>
 
-<section class="card"><h2>Create Order</h2>
-<div class="grid">
-<label>Instrument ID<input id="instrumentId"></label>
-<label>Side<select id="side"><option>BUY</option><option>SELL</option></select></label>
-<label>Type<select id="orderType"><option>LIMIT</option><option>MARKET</option></select></label>
-<label>Quantity<input id="quantity" type="number" step="0.0001" value="1"></label>
-<label>Price<input id="price" type="number" step="0.0001" value="200"></label>
-</div>
-<button onclick="createOrder()">Create Order</button><pre id="orderOutput">—</pre></section>
+      <div id="auth-error" class="form-message"></div>
+    </div>
+  </section>
 
-<section class="card"><h2>Orders</h2><button onclick="loadOrders()">Refresh Orders</button><div id="orders">—</div></section>
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="brand">Trade<span>Desk</span></div>
+      <div class="top-actions">
+        <span id="connection" class="connection"><i></i> API</span>
+        <span id="user-email" class="user-email">—</span>
+        <button id="logout" class="button ghost">Log out</button>
+      </div>
+    </header>
 
-<div class="grid">
-<section class="card"><h2>Positions</h2><button onclick="loadPositions()">Refresh</button><pre id="positionsOutput">—</pre></section>
-<section class="card"><h2>Executions</h2><button onclick="loadExecutions()">Refresh</button><pre id="executionsOutput">—</pre></section>
-</div>
+    <main class="layout">
+      <aside class="watchlist card">
+        <div class="card-heading">
+          <div>
+            <div class="eyebrow">Markets</div>
+            <h2>Instruments</h2>
+          </div>
+          <button id="refresh-all" class="icon-button" title="Refresh">↻</button>
+        </div>
+        <div id="instruments" class="instrument-list"></div>
+      </aside>
 
-<section class="card"><h2>API Output</h2><pre id="output">Ready.</pre></section>
-</main>
-<script src="app.js"></script>
+      <section class="content">
+        <div class="hero card">
+          <div>
+            <div class="eyebrow">Selected instrument</div>
+            <div class="instrument-title">
+              <h1 id="instrument-symbol">—</h1>
+              <span id="instrument-name">—</span>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <button id="quick-buy" class="button buy">Buy</button>
+            <button id="quick-sell" class="button sell">Sell</button>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat card"><span>Balance</span><strong id="stat-balance">—</strong><small id="stat-currency">—</small></div>
+          <div class="stat card"><span>Reserved</span><strong id="stat-reserved">—</strong><small>Funds reserved by open buy orders</small></div>
+          <div class="stat card"><span>Available</span><strong id="stat-available">—</strong><small>Balance minus reserved</small></div>
+          <div class="stat card positions-stat">
+            <span>My positions</span>
+            <div id="position-summary" class="position-summary">
+              <div class="position-summary-empty">No holdings yet</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="main-grid">
+          <section class="card order-card">
+            <div class="card-heading">
+              <div>
+                <div class="eyebrow">Trading</div>
+                <h2>Place order</h2>
+              </div>
+              <span id="selected-side-label" class="order-side-label buy-text">BUY</span>
+            </div>
+
+            <div class="segmented">
+              <button id="buy-button" class="segment active-buy">BUY</button>
+              <button id="sell-button" class="segment">SELL</button>
+            </div>
+
+            <div class="field-grid">
+              <label>Instrument
+                <select id="order-instrument"></select>
+              </label>
+              <label>Order type
+                <select id="order-type">
+                  <option value="LIMIT">Limit</option>
+                  <option value="MARKET">Market</option>
+                </select>
+              </label>
+            </div>
+
+            <label>Quantity
+              <input id="quantity" type="number" min="0" step="0.0001" placeholder="0.0000">
+            </label>
+
+            <label id="price-group">Limit price
+              <input id="price" type="number" min="0" step="0.01" placeholder="0.00">
+            </label>
+
+            <label id="max-cost-group" class="hidden">Maximum cost <span class="optional">(optional)</span>
+              <input id="max-cost" type="number" min="0" step="0.01" placeholder="0.00">
+            </label>
+
+            <div id="order-preview" class="preview">
+              <span>Estimated value</span><strong>—</strong>
+            </div>
+
+            <button id="submit-order" class="button buy wide">Place buy order</button>
+            <div id="order-message" class="form-message"></div>
+          </section>
+
+          <section class="card selected-info">
+            <div class="card-heading">
+              <div>
+                <div class="eyebrow">Instrument</div>
+                <h2 id="info-name">—</h2>
+              </div>
+              <span id="info-type" class="badge">—</span>
+            </div>
+            <div class="details">
+              <div><span>Symbol</span><strong id="info-symbol">—</strong></div>
+              <div><span>Currency</span><strong id="info-currency">—</strong></div>
+              <div><span>Instrument ID</span><strong id="info-id" class="mono">—</strong></div>
+            </div>
+            <div class="notice">
+              <strong>Order processing</strong>
+              <p>Orders are persisted first and processed by the matching worker asynchronously.</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="card data-card">
+          <div class="tabs">
+            <button class="data-tab active" data-view="orders">Orders</button>
+            <button class="data-tab" data-view="positions">Positions</button>
+            <button class="data-tab" data-view="executions">Executions</button>
+            <button class="data-tab" data-view="account">Account</button>
+          </div>
+          <div id="orders-view" class="data-view"></div>
+          <div id="positions-view" class="data-view hidden"></div>
+          <div id="executions-view" class="data-view hidden"></div>
+          <div id="account-view" class="data-view hidden"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
