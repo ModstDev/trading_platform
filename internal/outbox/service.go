@@ -10,6 +10,8 @@ import (
 	"github.com/ModstDev/trading_platform/internal/pubsub"
 )
 
+const outboxPollInterval = time.Second
+
 type Service struct {
 	queries *database.Queries
 	nats    *pubsub.NATS
@@ -39,7 +41,8 @@ func (s *Service) Process(ctx context.Context) error {
 
 		err = s.queries.MarkOutboxEventPublished(ctx, event.ID)
 		if err != nil {
-			return fmt.Errorf("marking event %s as published: %w", event.ID, err)
+			log.Printf("outbox: failed to mark event %s as published: %v", event.ID, err)
+			continue
 		}
 
 		log.Printf("outbox: event %s published", event.ID)
@@ -49,7 +52,7 @@ func (s *Service) Process(ctx context.Context) error {
 }
 
 func (s *Service) Run(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(outboxPollInterval)
 	defer ticker.Stop()
 
 	for {
