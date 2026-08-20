@@ -6,10 +6,11 @@ import (
 )
 
 type AccountResponse struct {
-	ID       string `json:"id"`
-	UserID   string `json:"user_id"`
-	Balance  string `json:"balance"`
-	Currency string `json:"currency"`
+	ID              string `json:"id"`
+	UserID          string `json:"user_id"`
+	Balance         string `json:"balance"`
+	ReservedBalance string `json:"reserved_balance"`
+	Currency        string `json:"currency"`
 }
 
 func (s *Server) getAccount(w http.ResponseWriter, r *http.Request) {
@@ -24,10 +25,11 @@ func (s *Server) getAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := AccountResponse{
-		ID:       account.ID,
-		UserID:   account.UserID,
-		Balance:  account.Balance,
-		Currency: account.Currency,
+		ID:              account.ID,
+		UserID:          account.UserID,
+		Balance:         account.Balance,
+		ReservedBalance: account.ReservedBalance,
+		Currency:        account.Currency,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
