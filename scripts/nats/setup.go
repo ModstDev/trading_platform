@@ -18,6 +18,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if err := js.DeleteStream("ORDERS"); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("ORDERS stream deleted")
+
 	stream, err := js.AddStream(&nats.StreamConfig{
 		Name:     "ORDERS",
 		Subjects: []string{"orders.created"},

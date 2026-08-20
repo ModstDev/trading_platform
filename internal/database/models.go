@@ -53,6 +53,16 @@ type Order struct {
 	MaxCost        sql.NullString `json:"max_cost"`
 }
 
+type OutboxEvent struct {
+	ID          string       `json:"id"`
+	AggregateID string       `json:"aggregate_id"`
+	EventType   string       `json:"event_type"`
+	Subject     string       `json:"subject"`
+	Payload     string       `json:"payload"`
+	CreatedAt   time.Time    `json:"created_at"`
+	PublishedAt sql.NullTime `json:"published_at"`
+}
+
 type Position struct {
 	ID               string    `json:"id"`
 	AccountID        string    `json:"account_id"`

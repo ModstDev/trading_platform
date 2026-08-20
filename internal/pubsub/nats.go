@@ -49,3 +49,7 @@ func (n *NATS) PublishOrderCreated(ctx context.Context, orderID string) error {
 
 	return nil
 }
+
+func (n *NATS) Publish(ctx context.Context, subject string, payload []byte) (*jetstream.PubAck, error) {
+	return n.js.Publish(ctx, subject, payload)
+}

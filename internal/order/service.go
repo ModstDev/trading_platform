@@ -218,9 +218,19 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*database.Orde
 		MaxCost:      maxCost,
 		Status:       string(StatusPending),
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("creating order: %w", err)
+	}
+
+	err = queries.CreateOutboxEvent(ctx, database.CreateOutboxEventParams{
+		ID:          uuid.New().String(),
+		AggregateID: orderID.String(),
+		EventType:   "ORDER_CREATED",
+		Subject:     "orders.created",
+		Payload:     orderID.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating outbox event: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
