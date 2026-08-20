@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/ModstDev/trading_platform/internal/config"
 	"github.com/ModstDev/trading_platform/internal/database"
@@ -26,7 +29,12 @@ func main() {
 
 	queries := database.New(db)
 
-	natsClient, err := pubsub.NewNATS("nats://localhost:4222")
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
+
+	natsClient, err := pubsub.NewNATS(natsURL)
 	if err != nil {
 		log.Fatalf("failed to connect to NATS: %v", err)
 	}
@@ -37,9 +45,12 @@ func main() {
 		natsClient,
 	)
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	log.Println("outbox worker started")
 
 	outboxService.Run(ctx)
+
+	log.Println("outbox worker stopped")
 }

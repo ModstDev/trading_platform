@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/ModstDev/trading_platform/internal/account"
 	"github.com/ModstDev/trading_platform/internal/config"
@@ -39,7 +40,12 @@ func main() {
 	positionService := position.NewService(queries)
 	executionService := execution.NewService(queries)
 
-	natsClient, err := pubsub.NewNATS("nats://localhost:4222")
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
+
+	natsClient, err := pubsub.NewNATS(natsURL)
 	if err != nil {
 		log.Fatalf("failed to connect to NATS: %v", err)
 	}

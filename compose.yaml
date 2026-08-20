@@ -4,10 +4,10 @@ services:
     container_name: trading-platform-mariadb
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: rootpassword
-      MARIADB_DATABASE: trading
-      MARIADB_USER: trading
-      MARIADB_PASSWORD: tradingpassword
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3307:3306"
     volumes:
@@ -21,6 +21,56 @@ services:
       - "8222:8222"
     volumes:
       - nats_data:/data
+  api:
+    build: .
+    container_name: trading-platform-api
+    command: ["/bin/api"]
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      NATS_URL: nats://nats:4222
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - mariadb
+      - nats
+
+  outbox-worker:
+    build: .
+    container_name: trading-platform-outbox-worker
+    command: ["/bin/outbox-worker"]
+    restart: unless-stopped
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      NATS_URL: nats://nats:4222
+    depends_on:
+      - mariadb
+      - nats
+
+  matching-worker:
+    build: .
+    container_name: trading-platform-matching-worker
+    command: ["/bin/matching-worker"]
+    restart: unless-stopped
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      NATS_URL: nats://nats:4222
+    depends_on:
+      - mariadb
+      - nats
 volumes:      
   mariadb_data:
   nats_data:
