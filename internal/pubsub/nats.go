@@ -53,3 +53,19 @@ func (n *NATS) PublishOrderCreated(ctx context.Context, orderID string) error {
 func (n *NATS) Publish(ctx context.Context, subject string, payload []byte) (*jetstream.PubAck, error) {
 	return n.js.Publish(ctx, subject, payload)
 }
+
+func (n *NATS) Subscribe(
+	subject string,
+	handler nats.MsgHandler,
+) (*nats.Subscription, error) {
+	sub, err := n.conn.Subscribe(subject, handler)
+	if err != nil {
+		return nil, fmt.Errorf("subscribing to %s: %w", subject, err)
+	}
+
+	return sub, nil
+}
+
+func (n *NATS) Conn() *nats.Conn {
+	return n.conn
+}

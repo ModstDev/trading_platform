@@ -8,8 +8,10 @@ const state = {
   orders: [],
   positions: [],
   executions: [],
+  marketPrices: {},
   selectedInstrumentId: null,
-  side: "BUY"
+  side: "BUY",
+  marketPriceTimer: null
 };
 
 const $ = id => document.getElementById(id);
@@ -126,6 +128,7 @@ async function loadSession() {
     state.user = await api("/me");
     $("user-email").textContent = state.user.email;
     await loadAll();
+    startMarketPricePolling();
   } catch (e) {
     showAuth();
     if (state.token) setAuthError(e.message);
@@ -138,7 +141,8 @@ async function loadAll() {
     loadInstruments(),
     loadOrders(),
     loadPositions(),
-    loadExecutions()
+    loadExecutions(),
+    loadMarketPrices()
   ]);
 }
 
@@ -210,6 +214,31 @@ async function loadExecutions() {
   renderExecutions();
 }
 
+async function loadMarketPrices() {
+  const prices = await api("/market-prices") || [];
+
+  state.marketPrices = {};
+
+  for (const price of prices) {
+    if (!price?.symbol) continue;
+
+    state.marketPrices[String(price.symbol).toUpperCase()] = {
+      price: price.price,
+      timestamp: price.timestamp
+    };
+  }
+
+  renderInstruments();
+  renderSelectedInstrument();
+  updatePreview();
+}
+
+function getMarketPrice(instrument) {
+  if (!instrument?.symbol) return null;
+
+  return state.marketPrices[String(instrument.symbol).toUpperCase()] || null;
+}
+
 function selectedInstrument() {
   return state.instruments.find(i => String(i.id) === String(state.selectedInstrumentId)) || null;
 }
@@ -228,15 +257,24 @@ function renderInstruments() {
     return;
   }
 
-  box.innerHTML = state.instruments.map(i => `
+  box.innerHTML = state.instruments.map(i => {
+    const marketPrice = getMarketPrice(i);
+
+    return `
     <button class="instrument ${String(i.id) === String(state.selectedInstrumentId) ? "active" : ""}" data-id="${esc(i.id)}">
       <div>
         <span class="symbol">${esc(i.symbol)}</span>
         <span class="name">${esc(i.name)}</span>
       </div>
-      <span class="type">${esc(i.type || "")}</span>
+      <div>
+        <span class="type">${esc(i.type || "")}</span>
+        <span class="market-price">
+          ${marketPrice ? money(marketPrice.price) : "—"}
+        </span>
+      </div>
     </button>
-  `).join("");
+  `;
+  }).join("");
 
   box.querySelectorAll(".instrument").forEach(btn => {
     btn.addEventListener("click", () => selectInstrument(btn.dataset.id));
@@ -257,7 +295,13 @@ function renderSelectedInstrument() {
   if (!i) return;
 
   $("instrument-symbol").textContent = i.symbol || "—";
-  $("instrument-name").textContent = i.name || "—";
+
+  const marketPrice = getMarketPrice(i);
+
+  $("instrument-name").textContent =
+    marketPrice
+      ? `${i.name || "—"} · ${money(marketPrice.price)}`
+      : (i.name || "—");
   $("info-name").textContent = i.name || "—";
   $("info-symbol").textContent = i.symbol || "—";
   $("info-type").textContent = i.type || "—";
@@ -451,8 +495,29 @@ function updatePreview() {
   const q = Number($("quantity").value);
   const p = Number($("price").value);
   const market = $("order-type").value === "MARKET";
-  $("order-preview").querySelector("strong").textContent =
-    !market && q > 0 && p > 0 ? money(q * p) : "—";
+
+  if (q <= 0) {
+    $("order-preview").querySelector("strong").textContent = "—";
+    return;
+  }
+
+  if (!market && p > 0) {
+    $("order-preview").querySelector("strong").textContent = money(q * p);
+    return;
+  }
+
+  if (market) {
+    const marketPrice = getMarketPrice(selectedInstrument());
+
+    $("order-preview").querySelector("strong").textContent =
+      marketPrice
+        ? `≈ ${money(q * Number(marketPrice.price))}`
+        : "Waiting for market price...";
+
+    return;
+  }
+
+  $("order-preview").querySelector("strong").textContent = "—";
 }
 
 function setSide(side) {
@@ -465,6 +530,24 @@ function setSide(side) {
   $("selected-side-label").className = `order-side-label ${buy ? "buy-text" : "sell-text"}`;
   $("submit-order").className = `button ${buy ? "buy" : "sell"} wide`;
   $("submit-order").textContent = `Place ${buy ? "buy" : "sell"} order`;
+}
+
+function startMarketPricePolling() {
+  if (state.marketPriceTimer) {
+    clearInterval(state.marketPriceTimer);
+  }
+
+  state.marketPriceTimer = setInterval(async () => {
+    if (!state.token || $("app").classList.contains("hidden")) {
+      return;
+    }
+
+    try {
+      await loadMarketPrices();
+    } catch (e) {
+      console.warn("Failed to refresh market prices:", e.message);
+    }
+  }, 5000);
 }
 
 async function login(e) {
@@ -488,6 +571,7 @@ async function login(e) {
     $("user-email").textContent = state.user.email;
     showApp();
     await loadAll();
+    startMarketPricePolling();
   } catch (e) {
     setAuthError(e.message);
   }
@@ -524,6 +608,12 @@ function logout() {
   state.token = null;
   localStorage.removeItem("access_token");
   state.user = null;
+  if (state.marketPriceTimer) {
+    clearInterval(state.marketPriceTimer);
+    state.marketPriceTimer = null;
+  }
+
+  state.marketPrices = {};
   showAuth();
 }
 

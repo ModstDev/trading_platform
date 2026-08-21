@@ -11,6 +11,7 @@ import (
 	"github.com/ModstDev/trading_platform/internal/execution"
 	"github.com/ModstDev/trading_platform/internal/httpapi"
 	"github.com/ModstDev/trading_platform/internal/instrument"
+	"github.com/ModstDev/trading_platform/internal/marketdata"
 	"github.com/ModstDev/trading_platform/internal/order"
 	"github.com/ModstDev/trading_platform/internal/position"
 	"github.com/ModstDev/trading_platform/internal/pubsub"
@@ -51,6 +52,17 @@ func main() {
 	}
 	defer natsClient.Close()
 
+	priceStore := marketdata.NewPriceStore()
+
+	priceSubscription, err := marketdata.StartConsumer(
+		natsClient.Conn(),
+		priceStore,
+	)
+	if err != nil {
+		log.Fatalf("failed to start market data consumer: %v", err)
+	}
+	defer priceSubscription.Unsubscribe()
+
 	server := httpapi.NewServer(
 		userService,
 		accountService,
@@ -60,6 +72,7 @@ func main() {
 		executionService,
 		cfg.JWT.Secret,
 		natsClient,
+		priceStore,
 	)
 
 	log.Println("API listening on :8080")

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ModstDev/trading_platform/internal/database"
+	"github.com/ModstDev/trading_platform/internal/marketdata"
 	"github.com/ModstDev/trading_platform/internal/order"
 	"github.com/ModstDev/trading_platform/internal/pubsub"
 	"github.com/ModstDev/trading_platform/internal/user"
@@ -51,6 +52,7 @@ type Server struct {
 	executionService  ExecutionService
 	jwtSecret         string
 	nats              *pubsub.NATS
+	priceStore        *marketdata.PriceStore
 }
 
 func NewServer(
@@ -62,6 +64,7 @@ func NewServer(
 	executionService ExecutionService,
 	jwtSecret string,
 	nats *pubsub.NATS,
+	priceStore *marketdata.PriceStore,
 ) *Server {
 	return &Server{
 		userService:       userService,
@@ -72,6 +75,7 @@ func NewServer(
 		executionService:  executionService,
 		jwtSecret:         jwtSecret,
 		nats:              nats,
+		priceStore:        priceStore,
 	}
 }
 
@@ -89,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /orders", s.requireAuth(http.HandlerFunc(s.listOrders)))
 	mux.Handle("GET /positions", s.requireAuth(http.HandlerFunc(s.listPositions)))
 	mux.Handle("GET /executions", s.requireAuth(http.HandlerFunc(s.listExecutions)))
+	mux.HandleFunc("GET /market-prices", s.getMarketPrices)
 
 	mux.Handle("DELETE /orders/{id}", s.requireAuth(http.HandlerFunc(s.cancelOrder)))
 
