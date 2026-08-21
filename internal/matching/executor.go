@@ -27,9 +27,6 @@ func (s *Service) executeMarketOrder(ctx context.Context, queries *database.Quer
 
 	switch order.Side {
 	case "BUY":
-		if err := s.executeBuy(ctx, queries, order, quantity, price); err != nil {
-			return fmt.Errorf("executing market buy: %w", err)
-		}
 
 		maxCost, err := decimal.NewFromString(order.MaxCost.String)
 		if err != nil {
@@ -38,6 +35,32 @@ func (s *Service) executeMarketOrder(ctx context.Context, queries *database.Quer
 
 		actualCost := quantity.Mul(price)
 
+		if actualCost.GreaterThan(maxCost) {
+			// The order can never execute at this price.
+			if _, err := queries.ReleaseFunds(
+				ctx,
+				database.ReleaseFundsParams{
+					ReservedBalance:   maxCost.String(),
+					ID:                order.AccountID,
+					ReservedBalance_2: maxCost.String(),
+				},
+			); err != nil {
+				return fmt.Errorf("releasing market order funds: %w", err)
+			}
+
+			if err := queries.CancelUnfilledMarketOrder(
+				ctx,
+				order.ID,
+			); err != nil {
+				return fmt.Errorf("canceling market order: %w", err)
+			}
+
+			return nil
+		}
+
+		if err := s.executeBuy(ctx, queries, order, quantity, price); err != nil {
+			return fmt.Errorf("executing market buy: %w", err)
+		}
 		unusedFunds := maxCost.Sub(actualCost)
 
 		if unusedFunds.GreaterThan(decimal.Zero) {
@@ -49,6 +72,7 @@ func (s *Service) executeMarketOrder(ctx context.Context, queries *database.Quer
 					ReservedBalance_2: unusedFunds.String(),
 				},
 			)
+
 			if err != nil {
 				return fmt.Errorf("releasing unused market funds: %w", err)
 			}
