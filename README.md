@@ -1,4 +1,5 @@
 <img width="951" height="468" alt="TradePlat" src="https://github.com/user-attachments/assets/03337667-e455-4083-bfd6-6e94a56a0abf" />
+
 # Trading Platform
 
 A simulated brokerage/trading platform built with Go.
