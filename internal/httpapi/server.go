@@ -104,6 +104,12 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("DELETE /orders/{id}", s.requireAuth(http.HandlerFunc(s.cancelOrder)))
 
+	// API docs
+	mux.HandleFunc("GET /swagger", swaggerUI)
+	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "docs/openapi.yaml")
+	})
+
 	return cors(mux)
 }
 

@@ -22,6 +22,8 @@ COPY --from=builder /bin/outbox-worker /bin/outbox-worker
 COPY --from=builder /bin/matching-worker /bin/matching-worker
 COPY --from=builder /bin/market-data-worker /bin/market-data-worker
 
+COPY docs ./docs
+
 
 FROM golang:1.26 AS migrator
 

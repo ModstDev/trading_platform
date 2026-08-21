@@ -15,7 +15,7 @@ It intentionally uses only endpoints currently exposed by the backend:
 - GET /positions
 - GET /executions
 
-It does NOT use order-book, WebSocket, real-time market-data, or manual matching endpoints.
+It does NOT use order-book, or manual matching endpoints.
 
 ## Run
 

@@ -1,0 +1,277 @@
+openapi: 3.0.3
+
+info:
+  title: Trading Platform API
+  description: REST API for the trading platform.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Authentication
+  - name: Account
+  - name: Instruments
+  - name: Orders
+  - name: Positions
+  - name: Executions
+  - name: System
+
+paths:
+
+  /users:
+    post:
+      tags: [Authentication]
+      summary: Register a user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+        '400':
+          description: Invalid request
+
+  /login:
+    post:
+      tags: [Authentication]
+      summary: Log in
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+        '400':
+          description: Invalid credentials
+
+  /me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /account:
+    get:
+      tags: [Account]
+      summary: Get current user's account
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Account
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Account not found
+
+  /instruments:
+    get:
+      tags: [Instruments]
+      summary: List instruments
+      responses:
+        '200':
+          description: List of instruments
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Create an order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created
+        '400':
+          description: Invalid order
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    get:
+      tags: [Orders]
+      summary: List current user's orders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of orders
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orders/{id}:
+    delete:
+      tags: [Orders]
+      summary: Cancel an order
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+      responses:
+        '204':
+          description: Order cancelled
+        '400':
+          description: Order cannot be cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+          
+  /positions:
+    get:
+      tags: [Positions]
+      summary: List current user's positions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of positions
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /executions:
+    get:
+      tags: [Executions]
+      summary: List current user's executions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of executions
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness check
+      responses:
+        '200':
+          description: API is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags: [System]
+      summary: Readiness check
+      responses:
+        '200':
+          description: API is ready
+        '503':
+          description: API dependency unavailable
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrderID:
+      name: id
+      in: path
+      required: true
+      description: Order UUID
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+
+  schemas:
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - instrument_id
+        - side
+        - type
+        - quantity
+      properties:
+        instrument_id:
+          type: string
+          format: uuid
+        side:
+          type: string
+          enum:
+            - BUY
+            - SELL
+        type:
+          type: string
+          enum:
+            - MARKET
+            - LIMIT
+        quantity:
+          type: number
+          format: double
+          example: 10
+        price:
+          type: number
+          format: double
+          nullable: true
+          example: 200.50
+        max_cost:
+          type: number
+          format: double
+          nullable: true
+          description: Maximum amount reserved for a MARKET BUY.
+          example: 1000
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
