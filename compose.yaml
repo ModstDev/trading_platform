@@ -1,76 +1,184 @@
 services:
+
   mariadb:
     image: mariadb:12.3
     container_name: trading-platform-mariadb
     restart: unless-stopped
+
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MARIADB_DATABASE: ${DB_NAME}
       MARIADB_USER: ${DB_USER}
       MARIADB_PASSWORD: ${DB_PASSWORD}
+
     ports:
       - "3307:3306"
+
     volumes:
       - mariadb_data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "healthcheck.sh",
+          "--connect",
+          "--innodb_initialized"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
   nats:
     image: nats:latest
     container_name: trading-platform-nats
-    command: ["-js", "-sd", "/data", "-m", "8222"]
+    restart: unless-stopped
+
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+      - "-m"
+      - "8222"
+
     ports:
       - "4222:4222"
       - "8222:8222"
+
     volumes:
       - nats_data:/data
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+
+    container_name: trading-platform-migrate
+
+    command:
+      [
+        "goose",
+        "-dir",
+        "/app/migrations",
+        "mysql",
+        "${DB_USER}:${DB_PASSWORD}@tcp(mariadb:3306)/${DB_NAME}?parseTime=true",
+        "up"
+      ]
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+
   api:
-    build: .
+    build:
+      context: .
+      target: runtime
+
     container_name: trading-platform-api
-    command: ["/bin/api"]
     restart: unless-stopped
+
+    command: ["/bin/api"]
+
     ports:
       - "8080:8080"
-    environment:
-      DB_HOST: mariadb
-      DB_PORT: "3306"
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      NATS_URL: nats://nats:4222
-      JWT_SECRET: ${JWT_SECRET}
-    depends_on:
-      - mariadb
-      - nats
 
-  outbox-worker:
-    build: .
-    container_name: trading-platform-outbox-worker
-    command: ["/bin/outbox-worker"]
-    restart: unless-stopped
     environment:
       DB_HOST: mariadb
       DB_PORT: "3306"
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+
       NATS_URL: nats://nats:4222
+
+      JWT_SECRET: ${JWT_SECRET}
+
     depends_on:
-      - mariadb
-      - nats
+      migrate:
+        condition: service_completed_successfully
+
+      nats:
+        condition: service_started
+
 
   matching-worker:
-    build: .
+    build:
+      context: .
+      target: runtime
+
     container_name: trading-platform-matching-worker
-    command: ["/bin/matching-worker"]
     restart: unless-stopped
+
+    command: ["/bin/matching-worker"]
+
     environment:
       DB_HOST: mariadb
       DB_PORT: "3306"
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+
       NATS_URL: nats://nats:4222
+
     depends_on:
-      - mariadb
-      - nats
-volumes:      
+      migrate:
+        condition: service_completed_successfully
+
+      nats:
+        condition: service_started
+
+
+  outbox-worker:
+    build:
+      context: .
+      target: runtime
+
+    container_name: trading-platform-outbox-worker
+    restart: unless-stopped
+
+    command: ["/bin/outbox-worker"]
+
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+
+      NATS_URL: nats://nats:4222
+
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+      nats:
+        condition: service_started
+
+
+  market-data-worker:
+    build:
+      context: .
+      target: runtime
+
+    container_name: trading-platform-market-data-worker
+    restart: unless-stopped
+
+    command: ["/bin/market-data-worker"]
+
+    environment:
+      NATS_URL: nats://nats:4222
+      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY}
+      MARKET_DATA_SYMBOLS: ${MARKET_DATA_SYMBOLS}
+
+    depends_on:
+      nats:
+        condition: service_started
+
+
+volumes:
+
   mariadb_data:
+
   nats_data:
