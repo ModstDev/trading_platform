@@ -85,7 +85,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /users", s.registerUser)
 	mux.HandleFunc("POST /login", s.loginUser)
 	mux.Handle("POST /orders", s.requireAuth(http.HandlerFunc(s.createOrder)))
-	mux.Handle("POST /orders/{id}/execute", s.requireAuth(http.HandlerFunc(s.executeOrder)))
 
 	mux.Handle("GET /me", s.requireAuth(http.HandlerFunc(s.getMe)))
 	mux.Handle("GET /account", s.requireAuth(http.HandlerFunc(s.getAccount)))

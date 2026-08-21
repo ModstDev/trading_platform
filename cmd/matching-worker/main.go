@@ -9,6 +9,7 @@ import (
 
 	"github.com/ModstDev/trading_platform/internal/config"
 	"github.com/ModstDev/trading_platform/internal/database"
+	"github.com/ModstDev/trading_platform/internal/marketdata"
 	"github.com/ModstDev/trading_platform/internal/matching"
 	"github.com/ModstDev/trading_platform/internal/pubsub"
 	"github.com/joho/godotenv"
@@ -27,8 +28,6 @@ func main() {
 	}
 	defer db.Close()
 
-	matchingService := matching.NewService(db)
-
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
 		natsURL = "nats://localhost:4222"
@@ -39,6 +38,19 @@ func main() {
 		log.Fatalf("failed to connect to NATS: %v", err)
 	}
 	defer natsClient.Close()
+
+	priceStore := marketdata.NewPriceStore()
+
+	priceSubscription, err := marketdata.StartConsumer(
+		natsClient.Conn(),
+		priceStore,
+	)
+	if err != nil {
+		log.Fatalf("starting market data consumer: %v", err)
+	}
+	defer priceSubscription.Unsubscribe()
+
+	matchingService := matching.NewService(db, priceStore)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
