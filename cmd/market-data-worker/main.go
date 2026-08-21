@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -34,6 +37,9 @@ type SubscribeMessage struct {
 }
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	if err := godotenv.Load(); err != nil {
 		log.Printf("could not load .env: %v", err)
 	}
@@ -84,28 +90,54 @@ func main() {
 	log.Printf("subscribed to: %s", subscribe.Params.Symbols)
 
 	go func() {
+		<-ctx.Done()
+
+		log.Println("closing Twelve Data WebSocket")
+
+		if err := conn.Close(); err != nil {
+			log.Printf("closing Twelve Data WebSocket: %v", err)
+		}
+	}()
+
+	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			heartbeat := struct {
-				Action string `json:"action"`
-			}{
-				Action: "heartbeat",
-			}
-
-			if err := conn.WriteJSON(heartbeat); err != nil {
-				log.Printf("sending heartbeat: %v", err)
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("stopping Twelve Data heartbeat")
 				return
-			}
 
-			log.Printf("Twelve Data heartbeat sent")
+			case <-ticker.C:
+				heartbeat := struct {
+					Action string `json:"action"`
+				}{
+					Action: "heartbeat",
+				}
+
+				if err := conn.WriteJSON(heartbeat); err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+
+					log.Printf("sending heartbeat: %v", err)
+					return
+				}
+
+				log.Println("Twelve Data heartbeat sent")
+			}
 		}
 	}()
 
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
+			if ctx.Err() != nil {
+				log.Println("market-data worker stopped")
+				return
+			}
+
 			log.Fatalf("reading Twelve Data message: %v", err)
 		}
 
