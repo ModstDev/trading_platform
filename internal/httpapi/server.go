@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 
 	"github.com/ModstDev/trading_platform/internal/database"
@@ -53,6 +54,7 @@ type Server struct {
 	jwtSecret         string
 	nats              *pubsub.NATS
 	priceStore        *marketdata.PriceStore
+	db                *sql.DB
 }
 
 func NewServer(
@@ -65,6 +67,7 @@ func NewServer(
 	jwtSecret string,
 	nats *pubsub.NATS,
 	priceStore *marketdata.PriceStore,
+	db *sql.DB,
 ) *Server {
 	return &Server{
 		userService:       userService,
@@ -76,11 +79,16 @@ func NewServer(
 		jwtSecret:         jwtSecret,
 		nats:              nats,
 		priceStore:        priceStore,
+		db:                db,
 	}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+
+	// Endpoints to check API status
+	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /ready", s.ready)
 
 	mux.HandleFunc("POST /users", s.registerUser)
 	mux.HandleFunc("POST /login", s.loginUser)

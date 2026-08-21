@@ -77,6 +77,7 @@ func main() {
 		cfg.JWT.Secret,
 		natsClient,
 		priceStore,
+		db,
 	)
 
 	httpServer := &http.Server{
