@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/ModstDev/trading_platform/internal/account"
 	"github.com/ModstDev/trading_platform/internal/config"
@@ -63,7 +67,7 @@ func main() {
 	}
 	defer priceSubscription.Unsubscribe()
 
-	server := httpapi.NewServer(
+	apiServer := httpapi.NewServer(
 		userService,
 		accountService,
 		instrumentService,
@@ -75,9 +79,37 @@ func main() {
 		priceStore,
 	)
 
-	log.Println("API listening on :8080")
+	httpServer := &http.Server{
+		Addr:    ":8080",
+		Handler: apiServer.Handler(),
+	}
 
-	if err := http.ListenAndServe(":8080", server.Handler()); err != nil {
-		log.Fatalf("HTTP server: %v", err)
+	go func() {
+		log.Println("API listening on :8080")
+
+		if err := httpServer.ListenAndServe(); err != nil &&
+			err != http.ErrServerClosed {
+			log.Fatalf("HTTP server: %v", err)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+
+	signal.Notify(
+		stop,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+
+	<-stop
+
+	log.Println("shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	defer cancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTPP server shutdown: %v", err)
 	}
 }
