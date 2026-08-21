@@ -1,4 +1,4 @@
-# TradeDesk frontend
+# Trader frontend
 
 This version was built against the current API in `ModstDev/trading_platform`.
 
